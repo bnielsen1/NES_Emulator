@@ -1,0 +1,1511 @@
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+
+pub struct CPU {
+    // Registers
+    pub reg_a: u8, // Stores results of arithmetic, logic, and memory access operations
+    pub reg_x: u8,
+    pub reg_y: u8,
+    pub status: u8, // Each bit stores the 7 status flags (ex. Z = zero flag)
+    pub pc: u16, // stores mem address of next byte of code (16 bits cause ram size)
+    memory: [u8; 0x10000] // Might need to be 0xFFFF
+}
+
+// status register bit values
+/*
+| Bit | Flag                       | Mask (binary) | Purpose                      |
+| --- | -------------------------- | ------------- | ---------------------------- |
+| 7   | N (Negative)               | `0b1000_0000` | Set if result is negative    |
+| 6   | V (Overflow)               | `0b0100_0000` | Set on signed overflow       |
+| 5   | Unused (always 1 on stack) | `0b0010_0000` | Typically ignored            |
+| 4   | B (Break)                  | `0b0001_0000` | Set by `BRK` instruction     |
+| 3   | D (Decimal)                | `0b0000_1000` | Decimal mode (unused in NES) |
+| 2   | I (Interrupt Disable)      | `0b0000_0100` | Disable interrupts           |
+| 1   | Z (Zero)                   | `0b0000_0010` | Set if result is zero        |
+| 0   | C (Carry)                  | `0b0000_0001` | Carry from math ops          |
+*/
+
+pub struct OpCode {
+    pub addr: u8,
+    pub code: &'static str,
+    pub bytes: usize,
+    pub cycles: usize,
+    pub addressing_mode: AddressingMode
+}
+
+impl OpCode {
+    pub fn new(addr: u8, code: &'static str, bytes: usize, cycles: usize, addressing_mode: AddressingMode) -> Self {
+        OpCode { addr, code, bytes, cycles, addressing_mode }
+    }
+}
+
+pub static OPCODE_TABLE: Lazy<HashMap<u8, OpCode>> = Lazy::new(|| {
+    let mut map = HashMap::new();
+
+    //BRK
+    map.insert(0x00, OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing));
+
+    //TAX
+    map.insert(0xAA, OpCode::new(0xAA, "TAX", 1, 2, AddressingMode::NoneAddressing));
+
+    //INX
+    map.insert(0xE8, OpCode::new(0xE8, "INX", 1, 2, AddressingMode::NoneAddressing));
+
+    // LDA
+    map.insert(0xA9, OpCode::new(0xA9, "LDA", 2, 2, AddressingMode::Immediate));
+    map.insert(0xA5, OpCode::new(0xA5, "LDA", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xB5, OpCode::new(0xB5, "LDA", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0xAd, OpCode::new(0xAD, "LDA", 3, 4, AddressingMode::Absolute));
+    map.insert(0xBD, OpCode::new(0xBD, "LDA", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0xB9, OpCode::new(0xB9, "LDA", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0xA1, OpCode::new(0xA1, "LDA", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0xB1, OpCode::new(0xB1, "LDA", 2, 5, AddressingMode::Indirect_Y));
+
+    // Unguided instructions
+
+    // ADC
+    map.insert(0x69, OpCode::new(0x69, "ADC", 2, 2, AddressingMode::Immediate));
+    map.insert(0x65, OpCode::new(0x65, "ADC", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0x75, OpCode::new(0x75, "ADC", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0x6D, OpCode::new(0x6D, "ADC", 3, 4, AddressingMode::Absolute));
+    map.insert(0x7D, OpCode::new(0x7D, "ADC", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0x79, OpCode::new(0x79, "ADC", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0x61, OpCode::new(0x61, "ADC", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0x71, OpCode::new(0x71, "ADC", 2, 5, AddressingMode::Indirect_Y));
+
+    // CLC
+    map.insert(0x18, OpCode::new(0x18, "CLC", 1, 2, AddressingMode::NoneAddressing));
+
+    // SEC
+    map.insert(0x38, OpCode::new(0x38, "SEC", 1, 2, AddressingMode::NoneAddressing));
+
+    // AND
+    map.insert(0x29, OpCode::new(0x29, "AND", 2, 2, AddressingMode::Immediate));
+    map.insert(0x25, OpCode::new(0x25, "AND", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0x35, OpCode::new(0x35, "AND", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0x2D, OpCode::new(0x2D, "AND", 3, 4, AddressingMode::Absolute));
+    map.insert(0x3D, OpCode::new(0x3D, "AND", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0x39, OpCode::new(0x39, "AND", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0x21, OpCode::new(0x21, "AND", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0x31, OpCode::new(0x31, "AND", 2, 5, AddressingMode::Indirect_Y));
+
+    // ASL
+    map.insert(0x0A, OpCode::new(0x0A, "ASL", 1, 2, AddressingMode::NoneAddressing));
+    map.insert(0x06, OpCode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0x16, OpCode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0x0E, OpCode::new(0x0E, "ASL", 3, 6, AddressingMode::Absolute));
+    map.insert(0x1E, OpCode::new(0x1E, "ASL", 3, 7, AddressingMode::Absolute_X));
+
+    // BCC
+    map.insert(0x90, OpCode::new(0x90, "BCC", 2, 2, AddressingMode::NoneAddressing));
+
+    // BCS
+    map.insert(0xB0, OpCode::new(0xB0, "BCS", 2, 2, AddressingMode::NoneAddressing));
+
+    // BEQ
+    map.insert(0xF0, OpCode::new(0xF0, "BEQ", 2, 2, AddressingMode::NoneAddressing));
+
+    // BIT
+    map.insert(0x24, OpCode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0x2C, OpCode::new(0x2C, "BIT", 3, 4, AddressingMode::Absolute));
+
+    // BMI
+    map.insert(0x30, OpCode::new(0x30, "BMI", 2, 2, AddressingMode::NoneAddressing));
+
+    // BNE
+    map.insert(0xD0, OpCode::new(0xD0, "BNE", 2, 2, AddressingMode::NoneAddressing));
+
+    // BPL
+    map.insert(0x10, OpCode::new(0x10, "BPL", 2, 2, AddressingMode::NoneAddressing));
+
+    // BVC
+    map.insert(0x50, OpCode::new(0x50, "BVC", 2, 2, AddressingMode::NoneAddressing));
+
+    // BVS
+    map.insert(0x70, OpCode::new(0x70, "BVS", 2, 2, AddressingMode::NoneAddressing));
+    
+    // CLD
+    map.insert(0xD8, OpCode::new(0xD8, "CLD", 1, 2, AddressingMode::NoneAddressing));
+
+    // CLV
+    map.insert(0xB8, OpCode::new(0xB8, "CLV", 1, 2, AddressingMode::NoneAddressing));
+
+    // CLI
+    map.insert(0x58, OpCode::new(0x58, "CLI", 1, 2, AddressingMode::NoneAddressing));
+
+    // CMP
+    map.insert(0xC9, OpCode::new(0xC9, "CMP", 2, 2, AddressingMode::Immediate));
+    map.insert(0xC5, OpCode::new(0xC5, "CMP", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xD5, OpCode::new(0xD5, "CMP", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0xCD, OpCode::new(0xCD, "CMP", 3, 4, AddressingMode::Absolute));
+    map.insert(0xDD, OpCode::new(0xDD, "CMP", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0xD9, OpCode::new(0xD9, "CMP", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0xC1, OpCode::new(0xC1, "CMP", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0xD1, OpCode::new(0xD1, "CMP", 2, 5, AddressingMode::Indirect_Y));
+
+    // CPX
+    map.insert(0xE0, OpCode::new(0xE0, "CPX", 2, 2, AddressingMode::Immediate));
+    map.insert(0xE4, OpCode::new(0xE4, "CPX", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xEC, OpCode::new(0xEC, "CPX", 3, 4, AddressingMode::Absolute));
+
+    // CPY
+    map.insert(0xC0, OpCode::new(0xC0, "CPY", 2, 2, AddressingMode::Immediate));
+    map.insert(0xC4, OpCode::new(0xC4, "CPY", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xCC, OpCode::new(0xCC, "CPY", 3, 4, AddressingMode::Absolute));
+
+    // LDX
+    map.insert(0xA2, OpCode::new(0xA2, "LDX", 2, 2, AddressingMode::Immediate));
+    map.insert(0xA6, OpCode::new(0xA6, "LDX", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xB6, OpCode::new(0xB6, "LDX", 2, 4, AddressingMode::ZeroPage_Y));
+    map.insert(0xAE, OpCode::new(0xAE, "LDX", 3, 4, AddressingMode::Absolute));
+    map.insert(0xBE, OpCode::new(0xBE, "LDX", 3, 4, AddressingMode::Absolute_Y));
+
+    // LDY
+    map.insert(0xA0, OpCode::new(0xA0, "LDY", 2, 2, AddressingMode::Immediate));
+    map.insert(0xA4, OpCode::new(0xA4, "LDY", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0xB4, OpCode::new(0xB4, "LDY", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0xAC, OpCode::new(0xAC, "LDY", 3, 4, AddressingMode::Absolute));
+    map.insert(0xBC, OpCode::new(0xBC, "LDY", 3, 4, AddressingMode::Absolute_X));
+
+    // DEC
+    map.insert(0xC6, OpCode::new(0xC6, "DEC", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0xD6, OpCode::new(0xD6, "DEC", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0xCE, OpCode::new(0xCE, "DEC", 3, 6, AddressingMode::Absolute));
+    map.insert(0xDE, OpCode::new(0xDE, "DEC", 3, 7, AddressingMode::Absolute_X));
+
+    // DEX
+    map.insert(0xCA, OpCode::new(0xCA, "DEX", 1, 2, AddressingMode::NoneAddressing));
+
+    // DEY
+    map.insert(0x88, OpCode::new(0x88, "DEY", 1, 2, AddressingMode::NoneAddressing));
+
+    map
+});
+
+#[derive(Debug)]
+#[allow(non_camel_case_types)]
+pub enum AddressingMode {
+   Immediate,
+   ZeroPage,
+   ZeroPage_X,
+   ZeroPage_Y,
+   Absolute,
+   Absolute_X,
+   Absolute_Y,
+   Indirect_X,
+   Indirect_Y,
+   NoneAddressing,
+}
+
+impl CPU {
+    pub fn new() -> Self {
+        CPU {
+            reg_a: 0,
+            status: 0,
+            pc: 0,
+            reg_x: 0,
+            reg_y: 0,
+            memory: [0; 0x10000], // Might need to be 0xFFFF
+        }
+    }
+
+    // Getting operand information
+
+    fn get_opperand_address(&mut self, mode: &AddressingMode) -> u16 {
+        match mode {
+            AddressingMode::Immediate => self.pc, // raw value at the address already
+            AddressingMode::ZeroPage => self.mem_read(self.pc) as u16, // pc stores 1 byte addr
+            AddressingMode::ZeroPage_X => {
+                let addr = self.mem_read(self.pc);
+                let output = addr.wrapping_add(self.reg_x) as u16;
+                output
+            },
+            AddressingMode::ZeroPage_Y => {
+                let addr = self.mem_read(self.pc);
+                let output = addr.wrapping_add(self.reg_y) as u16;
+                output
+            },
+            AddressingMode::Absolute => self.mem_read_u16(self.pc),
+            AddressingMode::Absolute_X => {
+                let addr = self.mem_read_u16(self.pc);
+                let output = addr.wrapping_add(self.reg_x as u16);
+                output
+            },
+            AddressingMode::Absolute_Y => {
+                let addr = self.mem_read_u16(self.pc);
+                let output = addr.wrapping_add(self.reg_y as u16);
+                output
+            },
+            AddressingMode::Indirect_X => {
+                let addr = self.mem_read(self.pc);
+                let ptr = addr.wrapping_add(self.reg_x);
+
+                let low = self.mem_read(ptr as u16);
+                let high = self.mem_read(ptr.wrapping_add(1) as u16);
+                let output = (high as u16) << 8 | (low as u16);
+                output
+            },
+            AddressingMode::Indirect_Y => {
+                let addr = self.mem_read(self.pc);
+
+                let low = self.mem_read(addr as u16);
+                let high = self.mem_read((addr as u8).wrapping_add(1) as u16);
+                let ptr = (high as u16) << 8 | (low as u16);
+                let output = ptr.wrapping_add(self.reg_y as u16);
+                output
+            }
+            AddressingMode::NoneAddressing => {
+                panic!("Mode {:?} is not supported", mode);
+            }
+        }
+    }
+
+    // Memory related functions
+
+    fn mem_read(&self, addr: u16) -> u8 {
+        return self.memory[addr as usize];
+    }
+
+    fn mem_write(&mut self, addr: u16, data: u8) {
+        self.memory[addr as usize] = data;
+    }
+
+    fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        let lo = self.mem_read(pos) as u16;
+        let hi = self.mem_read(pos + 1) as u16;
+        (hi << 8) | lo
+    }
+
+    fn mem_write_u16(&mut self, pos: u16, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0x00ff) as u8;
+
+        self.mem_write(pos, lo);
+        self.mem_write(pos + 1, hi);
+
+    }
+
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        self.load(program);
+        self.reset();
+        self.run();
+    }
+
+    pub fn reset(&mut self) {
+        self.reg_a = 0;
+        self.reg_x = 0;
+        self.status = 0;
+
+        self.pc = self.mem_read_u16(0xFFFC);
+    }
+
+    pub fn load(&mut self, program: Vec<u8>) {
+        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.mem_write_u16(0xFFFC, 0x8000);
+    }
+
+    pub fn run(&mut self) {
+        loop {
+            // Read the current opcode in binary and convert using our table
+            let opscode = self.mem_read(self.pc);
+            println!("Grabbing opscode {} at {} on the pc", self.mem_read(self.pc), self.pc);
+            let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
+
+            // Move the program counter to point to the next address after opscode
+            self.pc += 1;
+
+            // Match to the corresponding opscode and run that function
+            println!("Running instruction {}", op_object.code);
+            match op_object.code {
+                "LDA" => self.lda(&op_object.addressing_mode),
+                "BRK" => break,
+                "TAX" => self.tax(),
+                "INX" => self.inx(),
+                "CLC" => self.clc(),
+                "SEC" => self.sec(),
+                "ASL" => self.asl(&op_object.addressing_mode),
+                "AND" => self.and(&op_object.addressing_mode),
+                "ADC" => self.adc(&op_object.addressing_mode),
+                "BCC" => self.bcc(),
+                "BCS" => self.bcs(),
+                "BEQ" => self.beq(),
+                "BMI" => self.bmi(),
+                "BNE" => self.bne(),
+                "BPL" => self.bpl(),
+                "BIT" => self.bit(&op_object.addressing_mode),
+                "BVC" => self.bvc(),
+                "BVS" => self.bvs(),
+                "CLD" => self.cld(),
+                "CLV" => self.clv(),
+                "CLI" => self.cli(),
+                "CPX" => self.cpx(&op_object.addressing_mode),
+                "CPY" => self.cpy(&op_object.addressing_mode),
+                "CMP" => self.cmp(&op_object.addressing_mode),
+                "LDX" => self.ldx(&op_object.addressing_mode),
+                "LDY" => self.ldy(&op_object.addressing_mode),
+                "DEC" => self.dec(&op_object.addressing_mode),
+                "DEX" => self.dex(),
+                "DEY" => self.dey(),
+                _ => panic!("Returned op_code: \"{}\" is not yet implemented...", op_object.code)
+            }
+
+            // Increment the program counter depending on the addressing mode
+            // println!("Performing a pc increment from {} to {}", self.pc, self.pc + (op_object.bytes - 1) as u16);
+            // println!("What we add: {}", (op_object.bytes - 1) as u16);
+            self.pc = self.pc.wrapping_add((op_object.bytes - 1) as u16);
+        }
+        // println!("Final PC check {}", self.pc);
+    }
+
+    // Begin instruction set implementations
+
+    fn lda(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+
+        self.reg_a = self.mem_read(addr);
+        self.update_z_and_n_flags(self.reg_a);
+    }
+
+    fn tax(&mut self) {
+        self.reg_x = self.reg_a;
+        self.update_z_and_n_flags(self.reg_x);
+    }
+
+    fn inx(&mut self) {
+        self.reg_x = self.reg_x.wrapping_add(1);
+
+        self.update_z_and_n_flags(self.reg_x);
+    }
+
+    fn clc(&mut self) {
+        self.status = self.status & 0b1111_1110;
+    }
+
+    fn sec(&mut self) {
+        self.status = self.status | 0b0000_0001;
+    }
+
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+
+        let param = self.mem_read(addr);
+
+        // If carry bit is on already add it to sum
+        let mut sum: u32 = (self.reg_a as u32) + (param as u32);
+        if (self.status & 0b0000_0001) == 0b0000_0001 {
+            sum += 1;
+        }
+
+        // Update carry bit
+        if sum > 0xFF {
+            self.update_c_bit(true);
+        } else {
+            self.update_c_bit(false);
+        }
+
+        // Shorten sum to u32
+        let short_sum: u8 = sum as u8;
+
+        // Check for overflow
+        if (self.reg_a ^ short_sum) & (param ^ short_sum) & 0b1000_0000 == 0b1000_0000 {
+            self.update_o_flag(true);
+        } else {
+            self.update_o_flag(false);
+        }
+
+        self.reg_a = short_sum;
+
+        // Set other flags
+        self.update_z_and_n_flags(self.reg_a);
+
+    }
+
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+
+        self.reg_a = self.reg_a & param;
+
+        self.update_z_and_n_flags(self.reg_a);
+    }
+
+    fn asl(&mut self, mode: &AddressingMode) {
+        // Set default to working on accumulator
+        let mut param = self.reg_a;
+
+        // If we have a non A addressing mode handle it
+        if !matches!(mode, AddressingMode::NoneAddressing) {
+            let addr = self.get_opperand_address(mode);
+            param = self.mem_read(addr);
+        }
+
+        // Shift our data
+        let output = param << 1;
+
+        // If we have a carry
+        if (param & 0b1000_0000) == 0b1000_0000 {
+            self.sec();
+        } else {
+            self.clc();
+        }
+
+        // Set status flags
+        self.update_z_and_n_flags(output);
+
+        // If we're modifying memory
+        if !matches!(mode, AddressingMode::NoneAddressing) {
+            let addr = self.get_opperand_address(mode);
+            self.mem_write(addr, output);
+        } else { // modifying accumultor
+            self.reg_a = output;
+        }
+    } 
+
+    fn bcc(&mut self) {
+        // If carry flag is clear, branch pc
+        if (self.status ^ 0b0000_0001) & 0b0000_0001 == 0b0000_0001 { 
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bcs(&mut self) {
+        // If carry flag is set, branch pc
+        if (self.status & 0b0000_0001) == 0b0000_0001 {
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn beq(&mut self) {
+        if (self.status & 0b0000_00010) == 0b0000_0010 {
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+
+        let output = param & self.reg_a;
+
+        if output == 0 {
+            self.update_z_flag(true);
+        } else {
+            // Update Z flag
+            self.update_z_flag(false);
+        }
+
+        // Update N flag
+        if (param & 0b1000_0000) == 0b1000_0000 {
+            self.update_n_flag(true);
+        } else {
+            self.update_n_flag(false);
+        }
+
+        // Update O flag
+        if (param & 0b0100_0000) == 0b0100_0000 {
+            self.update_o_flag(true);
+        } else {
+            self.update_o_flag(false);
+        }
+    }
+
+    fn bmi(&mut self) {
+        if (self.status & 0b1000_0000) == 0b1000_0000 {
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bne(&mut self) {
+        if (self.status ^ 0b0000_0010) & 0b0000_0010 == 0b0000_0010 { 
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bpl(&mut self) {
+        if (self.status ^ 0b1000_0000) & 0b1000_0000 == 0b1000_0000 { 
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bvc(&mut self) {
+        if (self.status ^ 0b0100_0000) & 0b0100_0000 == 0b0100_0000 { 
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn bvs(&mut self) {
+        // If carry flag is set, branch pc
+        if (self.status & 0b0100_0000) == 0b0100_0000 {
+            let offset: i8 = self.mem_read(self.pc) as i8;
+            self.pc = self.pc.wrapping_add(offset as u16);
+        }
+    }
+
+    fn cld(&mut self) {
+        self.status = self.status & 0b1111_0111;
+    }
+
+    fn cli(&mut self) {
+        self.status = self.status & 0b1111_1011;
+    }
+
+    fn clv(&mut self) {
+        self.status = self.status & 0b1011_1111;
+    }
+
+    fn cmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        self.compare(self.reg_a, param);
+    }
+
+    fn cpx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        self.compare(self.reg_x, param);
+    }
+    
+    fn cpy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        self.compare(self.reg_y, param);
+    }
+
+    fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+
+        self.reg_x = self.mem_read(addr);
+        self.update_z_and_n_flags(self.reg_x);
+    }
+
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+
+        self.reg_y = self.mem_read(addr);
+        self.update_z_and_n_flags(self.reg_y);
+    }
+
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        let output = self.decrement(param);
+
+        self.mem_write(addr, output);
+    }
+
+    fn dex(&mut self) {
+        self.reg_x = self.decrement(self.reg_x)
+    }
+
+    fn dey(&mut self) {
+        self.reg_y = self.decrement(self.reg_y);
+    }
+
+    fn decrement(&mut self, value: u8) -> u8 {
+        let output: i8 = (value as i8).wrapping_sub(1);
+        self.update_z_and_n_flags(output as u8);
+        output as u8
+    }
+
+    fn compare(&mut self, val1: u8, val2: u8) {
+        let output: i8 = (val1 as i8).wrapping_sub(val2 as i8);
+
+        // Set flags
+        // Carry
+        if val1 >= val2 {
+            self.update_c_bit(true);
+        }
+
+        self.update_z_and_n_flags(output as u8);
+    }
+
+    fn update_z_and_n_flags(&mut self, value: u8) {
+        // Set Z flag
+        if value == 0 {
+            self.status = self.status | 0b00000010;
+        } else {
+            self.status = self.status & 0b11111101;
+        }
+
+        // Set N flag
+        if value & 0b1000_0000 != 0 {
+            self.status = self.status | 0b10000000;
+        } else {
+            self.status = self.status & 0b01111111;
+        }
+    }
+
+    fn update_n_flag(&mut self, status: bool) {
+        if status {
+            self.status = self.status | 0b1000000;
+        } else {
+            self.status = self.status & 0b01111111;
+        }
+    }
+
+    fn update_z_flag(&mut self, status: bool) {
+        if status {
+            self.status = self.status | 0b0000_0010;
+        } else {
+            self.status = self.status & 0b1111_1101;
+        }
+    }
+
+    fn update_o_flag(&mut self, status: bool) {
+        if status {
+            self.status = self.status | 0b01000000;
+        } else {
+            self.status = self.status & 0b10111111;
+        }
+    }
+
+    fn update_c_bit(&mut self, status: bool) {
+        if status {
+            self.status = self.status | 0b0000_0001;
+        } else {
+            self.status = self.status & 0b1111_1110;
+        }
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#[cfg(test)]
+mod test {
+   use super::*;
+
+        #[test]
+        fn test_lda_from_memory() {
+            let mut cpu = CPU::new();
+            cpu.mem_write(0x10, 0x55);
+
+            cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+
+            assert_eq!(cpu.reg_a, 0x55);
+        }
+
+        #[test]
+        fn test_tax_basics() {
+            let mut cpu = CPU::new();
+            cpu.mem_write(0x10, 0x13);
+            
+            cpu.load_and_run(vec![0xa5, 0x10, 0xaa, 0x00]);
+
+            assert_eq!(cpu.reg_a, cpu.reg_x);
+        }
+
+        #[test]
+        fn test_inx_basics() {
+            let mut cpu = CPU::new();
+            cpu.mem_write(0x10, 0xFF);
+
+            cpu.load_and_run(vec![0xa5, 0x10, 0xaa, 0xe8, 0x00]);
+
+            println!("actual: {}", cpu.reg_x);
+
+            assert_eq!(0x00, cpu.reg_x);
+        }
+}
+
+// SEC TESTING
+#[test]
+fn test_sec_sets_carry_flag() {
+    let mut cpu = CPU::new();
+
+    // Run program: SEC (set carry), BRK
+    cpu.load_and_run(vec![0x38, 0x00]);
+
+    // Carry flag is bit 0 in the status register
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001);
+}
+
+// BRK TESTING
+#[test]
+fn test_clc_clears_carry_flag() {
+    let mut cpu = CPU::new();
+
+    // Run program: SEC (set carry), CLC (clear carry), BRK
+    cpu.load_and_run(vec![0x38, 0x18, 0x00]);
+
+    // Carry flag should be cleared
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0000);
+}
+
+
+#[cfg(test)]
+mod adc_tests {
+    use super::*;
+
+    #[test]
+    fn test_adc_simple_add() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x20);
+
+        // Program:
+        // LDA #$10
+        // CLC       ; clear carry
+        // ADC $20   ; add contents of 0x20
+        // BRK
+        cpu.load_and_run(vec![
+            0xA9, 0x10, // LDA #$10
+            0x18,       // CLC
+            0x65, 0x10, // ADC $20
+            0x00,       // BRK
+        ]);
+
+        assert_eq!(cpu.reg_a, 0x30);
+        assert_eq!(cpu.status & 0b0000_0001, 0); // Carry clear
+        assert_eq!(cpu.status & 0b0100_0000, 0); // Overflow clear
+        assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+        assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    }
+
+    #[test]
+    fn test_adc_with_carry_in() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0x20);
+
+        // Program:
+        // LDA #$10
+        // SEC       ; set carry
+        // ADC $20
+        // BRK
+        cpu.load_and_run(vec![
+            0xA9, 0x10, // LDA #$10
+            0x38,       // SEC
+            0x65, 0x20, // ADC $20
+            0x00,       // BRK
+        ]);
+
+        assert_eq!(cpu.reg_a, 0x31); // 0x10 + 0x20 + 1
+        assert_eq!(cpu.status & 0b0000_0001, 0); // Carry clear
+    }
+
+    #[test]
+    fn test_adc_carry_out() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x30, 0x20);
+
+        // Program:
+        // LDA #$F0
+        // CLC
+        // ADC $30
+        // BRK
+        cpu.load_and_run(vec![
+            0xA9, 0xF0, // LDA #$F0
+            0x18,       // CLC
+            0x65, 0x30, // ADC $30
+            0x00,       // BRK
+        ]);
+
+        assert_eq!(cpu.reg_a, 0x10); // 0xF0 + 0x20 = 0x110 -> 0x10
+        assert_eq!(cpu.status & 0b0000_0001, 1); // Carry set
+        assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    }
+
+    #[test]
+    fn test_adc_overflow_flag_set() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x40, 0x01);
+
+        // Program:
+        // LDA #$7F
+        // CLC
+        // ADC $40
+        // BRK
+        cpu.load_and_run(vec![
+            0xA9, 0x7F, // LDA #$7F
+            0x18,       // CLC
+            0x65, 0x40, // ADC $40
+            0x00,       // BRK
+        ]);
+
+        assert_eq!(cpu.reg_a, 0x80);
+        assert_eq!(cpu.status & 0b0100_0000, 0b0100_0000); // Overflow flag set
+        assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative flag set
+    }
+
+    #[test]
+    fn test_adc_result_zero() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x50, 0x01);
+
+        // Program:
+        // LDA #$FF
+        // CLC
+        // ADC $50
+        // BRK
+        cpu.load_and_run(vec![
+            0xA9, 0xFF, // LDA #$FF
+            0x18,       // CLC
+            0x65, 0x50, // ADC $50
+            0x00,       // BRK
+        ]);
+
+        assert_eq!(cpu.reg_a, 0x00);
+        assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero flag set
+        assert_eq!(cpu.status & 0b0000_0001, 1);            // Carry set
+    }
+}
+
+// AND Tests
+
+#[test]
+fn test_and_sets_bits_correctly() {
+    let mut cpu = CPU::new();
+    // LDA #$F0
+    // AND #$0F
+    // BRK
+    cpu.load_and_run(vec![0xA9, 0xF0, 0x29, 0x0F, 0x00]);
+
+    assert_eq!(cpu.reg_a, 0x00); // F0 & 0F = 00
+    assert!(cpu.status & 0b0000_0010 != 0); // Zero flag should be set
+}
+
+#[test]
+fn test_and_sets_negative_flag() {
+    let mut cpu = CPU::new();
+    // LDA #$F0
+    // AND #$F0
+    // BRK
+    cpu.load_and_run(vec![0xA9, 0xF0, 0x29, 0xF0, 0x00]);
+
+    assert_eq!(cpu.reg_a, 0xF0); // F0 & F0 = F0
+    assert!(cpu.status & 0b1000_0000 != 0); // Negative flag should be set (bit 7 is 1)
+}
+
+#[test]
+fn test_and_zero_flag_not_set() {
+    let mut cpu = CPU::new();
+    // LDA #$AA
+    // AND #$0F
+    // BRK
+    cpu.load_and_run(vec![0xA9, 0xAA, 0x29, 0x0F, 0x00]);
+
+    assert_eq!(cpu.reg_a, 0x0A); // AA & 0F = 0A
+    assert!(cpu.status & 0b0000_0010 == 0); // Zero flag should be clear
+    assert!(cpu.status & 0b1000_0000 == 0); // Negative flag should be clear
+}
+
+#[test]
+fn test_asl_accumulator_sets_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xa9, 0x80, // LDA #$80 (1000_0000)
+        0x0a,       // ASL A
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x00); // 1000_0000 << 1 == 0000_0000 (overflowed)
+    assert!(cpu.status & 0b0000_0001 != 0); // Carry should be set
+    assert!(cpu.status & 0b0000_0010 != 0); // Zero should be set
+    assert!(cpu.status & 0b1000_0000 == 0); // Negative should be clear
+}
+
+#[test]
+fn test_asl_accumulator_sets_negative() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xa9, 0x40, // LDA #$40 (0100_0000)
+        0x0a,       // ASL A -> should become 1000_0000
+        0x00,
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x80);
+    assert!(cpu.status & 0b1000_0000 != 0); // Negative flag set
+    assert!(cpu.status & 0b0000_0001 == 0); // Carry clear
+    assert!(cpu.status & 0b0000_0010 == 0); // Zero clear
+}
+
+#[test]
+fn test_asl_accumulator_clear_flags() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xa9, 0x01, // LDA #$01
+        0x0a,       // ASL A => 0000_0010
+        0x00,
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x02);
+    assert!(cpu.status & 0b0000_0001 == 0); // Carry clear
+    assert!(cpu.status & 0b0000_0010 == 0); // Zero clear
+    assert!(cpu.status & 0b1000_0000 == 0); // Negative clear
+}
+
+#[test]
+fn test_bcc_branch_taken() {
+    let mut cpu = CPU::new();
+
+    // Clear carry flag first with CLC
+    // Program:
+    // 0x00: CLC         (clear carry)
+    // 0x01: BCC +1      (branch forward 1 bytes)
+    // 0x03: NOP (0xEA)  (should be skipped)
+    // 0x04: BRK (0x00)  (should be next executed instruction after branch)
+    cpu.load_and_run(vec![0x18, 0x90, 0x01, 0xEA, 0x00]);
+
+    // Since carry is clear, branch taken: PC after branch = 0x04 (BRK)
+    assert_eq!(cpu.pc, 0x8005);
+}
+
+#[test]
+fn test_bcc_branch_not_taken() {
+    let mut cpu = CPU::new();
+
+    // Set carry flag first with SEC
+    // Program:
+    // 0x00: SEC         (set carry)
+    // 0x01: BCC +2      (branch forward 1 bytes)
+    // 0x03: BRK (0x00)  (should be next executed instruction since branch not taken)
+    // 0x04: NOP (0xEA)  (should be skipped)
+    cpu.load_and_run(vec![0x38, 0x90, 0x01, 0x00, 0xEA]);
+
+    // Carry set means no branch, so next executed instruction at 0x03 (BRK)
+    assert_eq!(cpu.pc, 0x8004);
+}
+
+#[test]
+fn test_bcc_branch_negative_offset() {
+    let mut cpu = CPU::new();
+
+    // Clear carry flag first with CLC
+    // Program:
+    // 0x00: SEC         (set carry)
+    // 0x01: BCC 3
+    // 0x03: CLC         (clear carry)
+    // 0x04: BCC -5      (branch backward 3 bytes, 0xFD in two's complement)
+    // 0x06: NOP (0xEA)
+    // 0x07: BRK (0x00)
+    cpu.load_and_run(vec![0x38, 0x90, 0x04, 0x18, 0x90, 0xFB, 0xEA, 0x00]);
+
+    // After executing CLC + BCC, branch jumps backward 3 from PC after operand (which is at 0x03)
+    // So PC = 0x03 - 3 = 0x00, so next instruction at 0x00, which is CLC again.
+    // This will cause a loop, so let’s just test the PC after running once.
+    assert_eq!(cpu.pc, 0x8008);
+}
+
+#[test]
+fn test_bcs_branch_taken() {
+    let mut cpu = CPU::new();
+
+    // Clear carry flag first with CLC
+    // Program:
+    // 0x00: SEC         (set carry)
+    // 0x01: BCS +1      (branch forward 1 bytes)
+    // 0x03: NOP (0xEA)  (should be skipped)
+    // 0x04: BRK (0x00)  (should be next executed instruction after branch)
+    cpu.load_and_run(vec![0x38, 0xB0, 0x01, 0xEA, 0x00]);
+
+    // Since carry is clear, branch taken: PC after branch = 0x04 (BRK)
+    assert_eq!(cpu.pc, 0x8005);
+}
+
+#[test]
+fn test_bcs_branch_not_taken() {
+    let mut cpu = CPU::new();
+
+    // Set carry flag first with SEC
+    // Program:
+    // 0x00: CLC         (set carry)
+    // 0x01: BCS +2      (branch forward 1 bytes)
+    // 0x03: BRK (0x00)  (should be next executed instruction since branch not taken)
+    // 0x04: NOP (0xEA)  (should be skipped)
+    cpu.load_and_run(vec![0x18, 0xB0, 0x01, 0x00, 0xEA]);
+
+    // Carry set means no branch, so next executed instruction at 0x03 (BRK)
+    assert_eq!(cpu.pc, 0x8004);
+}
+
+#[test]
+fn test_bcs_branch_negative_offset() {
+    let mut cpu = CPU::new();
+
+    // Clear carry flag first with CLC
+    // Program:
+    // 0x00: CLC         (set carry)
+    // 0x01: BCS 3
+    // 0x03: SEC         (clear carry)
+    // 0x04: BCS -5      (branch backward 3 bytes, 0xFD in two's complement)
+    // 0x06: NOP (0xEA)
+    // 0x07: BRK (0x00)
+    cpu.load_and_run(vec![0x18, 0xB0, 0x04, 0x38, 0xB0, 0xFB, 0xEA, 0x00]);
+
+    // After executing CLC + BCC, branch jumps backward 3 from PC after operand (which is at 0x03)
+    // So PC = 0x03 - 3 = 0x00, so next instruction at 0x00, which is CLC again.
+    // This will cause a loop, so let’s just test the PC after running once.
+    assert_eq!(cpu.pc, 0x8008);
+}
+
+#[test]
+fn test_beq_branch_taken_forward() {
+    let mut cpu = CPU::new();
+
+    // Set zero flag using LDA #$00 (will set Zero flag)
+    // Program:
+    // 0x00: LDA #$00    (set Zero flag)
+    // 0x02: BEQ +1      (branch forward 1 bytes)
+    // 0x04: NOP         (should be skipped)
+    // 0x05: BRK         (should be executed after branch)
+    cpu.load_and_run(vec![0xA9, 0x00, 0xF0, 0x01, 0xEA, 0x00]);
+
+    // BEQ is taken, so PC should be at BRK after branch
+    assert_eq!(cpu.pc, 0x8006);
+}
+
+#[test]
+fn test_beq_branch_not_taken() {
+    let mut cpu = CPU::new();
+
+    // Clear zero flag using LDA #$01
+    // Program:
+    // 0x00: LDA #$01    (clears Zero flag)
+    // 0x02: BEQ +2      (not taken)
+    // 0x04: BRK         (should be executed next)
+    // 0x05: NOP         (should be skipped)
+    cpu.load_and_run(vec![0xA9, 0x01, 0xF0, 0x02, 0x00, 0xEA]);
+
+    // BEQ not taken, so PC should continue to BRK
+    assert_eq!(cpu.pc, 0x8005);
+}
+
+// BIT TESTING
+
+#[test]
+fn test_bit_sets_zero_flag_when_result_zero() {
+    let mut cpu = CPU::new();
+    // LDA #$00
+    // BIT $10 (memory at $10 is $FF => A & M = 0)
+    // BRK
+    cpu.mem_write(0x10, 0xFF);
+    cpu.load_and_run(vec![0xA9, 0x00, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Z flag set
+}
+
+#[test]
+fn test_bit_clears_zero_flag_when_result_nonzero() {
+    let mut cpu = CPU::new();
+    // LDA #$FF
+    // BIT $10 (memory at $10 is $0F => A & M = $0F != 0)
+    // BRK
+    cpu.mem_write(0x10, 0x0F);
+    cpu.load_and_run(vec![0xA9, 0xFF, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Z flag clear
+}
+
+#[test]
+fn test_bit_sets_negative_flag_when_bit_7_of_memory_set() {
+    let mut cpu = CPU::new();
+    // A = anything
+    // BIT $10 (memory = 0b1000_0000)
+    cpu.mem_write(0x10, 0b1000_0000);
+    cpu.load_and_run(vec![0xA9, 0xFF, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // N flag set
+}
+
+#[test]
+fn test_bit_clears_negative_flag_when_bit_7_of_memory_clear() {
+    let mut cpu = CPU::new();
+    // A = anything
+    // BIT $10 (memory = 0b0111_1111)
+    cpu.mem_write(0x10, 0b0111_1111);
+    cpu.load_and_run(vec![0xA9, 0xFF, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b1000_0000, 0); // N flag clear
+}
+
+#[test]
+fn test_bit_sets_overflow_flag_when_bit_6_of_memory_set() {
+    let mut cpu = CPU::new();
+    // A = anything
+    // BIT $10 (memory = 0b0100_0000)
+    cpu.mem_write(0x10, 0b0100_0000);
+    cpu.load_and_run(vec![0xA9, 0xFF, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b0100_0000, 0b0100_0000); // V flag set
+}
+
+#[test]
+fn test_bit_clears_overflow_flag_when_bit_6_of_memory_clear() {
+    let mut cpu = CPU::new();
+    // A = anything
+    // BIT $10 (memory = 0b1011_1111)
+    cpu.mem_write(0x10, 0b1011_1111); // bit 6 = 0
+    cpu.load_and_run(vec![0xA9, 0xFF, 0x24, 0x10, 0x00]);
+
+    assert_eq!(cpu.status & 0b0100_0000, 0); // V flag clear
+}
+
+//CMP
+#[test]
+fn test_cmp_equal() {
+    let mut cpu = CPU::new();
+
+    // LDA #$20
+    // CMP #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA9, 0x20, // LDA #$20
+        0xC9, 0x20, // CMP #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set (A >= M)
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set (A == M)
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cmp_less_than() {
+    let mut cpu = CPU::new();
+
+    // LDA #$10
+    // CMP #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA9, 0x10, // LDA #$10
+        0xC9, 0x20, // CMP #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0);           // Carry clear (A < M)
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_cmp_greater_than() {
+    let mut cpu = CPU::new();
+
+    // LDA #$30
+    // CMP #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA9, 0x30, // LDA #$30
+        0xC9, 0x20, // CMP #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cmp_memory_operand() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0x42);
+
+    // LDA #$50
+    // CMP $10
+    // BRK
+    cpu.load_and_run(vec![
+        0xA9, 0x50, // LDA #$50
+        0xC5, 0x10, // CMP $10
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cpy_equal() {
+    let mut cpu = CPU::new();
+
+    // LDY #$40
+    // CPY #$40
+    // BRK
+    cpu.load_and_run(vec![
+        0xA0, 0x40, // LDY #$40
+        0xC0, 0x40, // CPY #$40
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cpy_less_than() {
+    let mut cpu = CPU::new();
+
+    // LDY #$10
+    // CPY #$30
+    // BRK
+    cpu.load_and_run(vec![
+        0xA0, 0x10, // LDY #$10
+        0xC0, 0x30, // CPY #$30
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0);           // Carry clear
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_cpy_greater_than() {
+    let mut cpu = CPU::new();
+
+    // LDY #$50
+    // CPY #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA0, 0x50, // LDY #$50
+        0xC0, 0x20, // CPY #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cpx_equal() {
+    let mut cpu = CPU::new();
+
+    // LDX #$20
+    // CPX #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA2, 0x20, // LDX #$20
+        0xE0, 0x20, // CPX #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_cpx_less_than() {
+    let mut cpu = CPU::new();
+
+    // LDX #$10
+    // CPX #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA2, 0x10, // LDX #$10
+        0xE0, 0x20, // CPX #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0);           // Carry clear
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_cpx_greater_than() {
+    let mut cpu = CPU::new();
+
+    // LDX #$30
+    // CPX #$20
+    // BRK
+    cpu.load_and_run(vec![
+        0xA2, 0x30, // LDX #$30
+        0xE0, 0x20, // CPX #$20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set
+    assert_eq!(cpu.status & 0b0000_0010, 0);           // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // Negative clear
+}
+
+#[test]
+fn test_dec_simple() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0x42);
+
+    // Program:
+    // DEC $10
+    // BRK
+    cpu.load_and_run(vec![
+        0xC6, 0x10, // DEC $10
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x10), 0x41);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dec_to_zero() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x20, 0x01);
+
+    cpu.load_and_run(vec![
+        0xC6, 0x20, // DEC $20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x20), 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero flag set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dec_negative_result() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x30, 0x80);
+
+    cpu.load_and_run(vec![
+        0xC6, 0x30, // DEC $30
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x30), 0x7F);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dec_wraparound() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x40, 0x00);
+
+    cpu.load_and_run(vec![
+        0xC6, 0x40, // DEC $40
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x40), 0xFF); // Wrapped around
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative flag set
+}
+
+#[test]
+fn test_dex_simple() {
+    let mut cpu = CPU::new();
+
+    // LDX #$42
+    // DEX
+    // BRK
+    cpu.load_and_run(vec![
+        0xA2, 0x42, // LDX #$42
+        0xCA,       // DEX
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_x, 0x41);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dex_to_zero() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA2, 0x01, // LDX #$01
+        0xCA,       // DEX
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_x, 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero flag set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dex_wraparound() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA2, 0x00, // LDX #$00
+        0xCA,       // DEX
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_x, 0xFF);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative flag set
+}
+
+#[test]
+fn test_dey_simple() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA0, 0x10, // LDY #$10
+        0x88,       // DEY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0x0F);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dey_to_zero() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA0, 0x01, // LDY #$01
+        0x88,       // DEY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero flag set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_dey_wraparound() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA0, 0x00, // LDY #$00
+        0x88,       // DEY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0xFF);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative flag set
+}
+
+
+
+fn main() {
+    println!("Hello, world!");
+}
