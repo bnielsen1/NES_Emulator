@@ -8,6 +8,7 @@ pub struct CPU {
     pub reg_y: u8,
     pub status: u8, // Each bit stores the 7 status flags (ex. Z = zero flag)
     pub pc: u16, // stores mem address of next byte of code (16 bits cause ram size)
+    pub sp: u8,
     memory: [u8; 0x10000] // Might need to be 0xFFFF
 }
 
@@ -179,6 +180,81 @@ pub static OPCODE_TABLE: Lazy<HashMap<u8, OpCode>> = Lazy::new(|| {
     // DEY
     map.insert(0x88, OpCode::new(0x88, "DEY", 1, 2, AddressingMode::NoneAddressing));
 
+    // EOR
+    map.insert(0x49, OpCode::new(0x49, "EOR", 2, 2, AddressingMode::Immediate));
+    map.insert(0x45, OpCode::new(0x45, "EOR", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0x55, OpCode::new(0x55, "EOR", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0x4D, OpCode::new(0x4D, "EOR", 3, 4, AddressingMode::Absolute));
+    map.insert(0x5D, OpCode::new(0x5D, "EOR", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0x59, OpCode::new(0x59, "EOR", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0x41, OpCode::new(0x41, "EOR", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0x51, OpCode::new(0x51, "EOR", 2, 5, AddressingMode::Indirect_Y));
+
+    // INC
+    map.insert(0xE6, OpCode::new(0xE6, "INC", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0xF6, OpCode::new(0xF6, "INC", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0xEE, OpCode::new(0xEE, "INC", 3, 6, AddressingMode::Absolute));
+    map.insert(0xFE, OpCode::new(0xFE, "INC", 3, 7, AddressingMode::Absolute_X));
+
+    // INY
+    map.insert(0xC8, OpCode::new(0xC8, "INY", 1, 2, AddressingMode::NoneAddressing));
+
+    // JMP
+    map.insert(0x4C, OpCode::new(0x4C, "JMP", 3, 3, AddressingMode::Immediate));
+    map.insert(0x6C, OpCode::new(0x6C, "JMP", 3, 5, AddressingMode::Absolute));
+
+    // JSR
+    map.insert(0x20, OpCode::new(0x20, "JSR", 3, 6, AddressingMode::Absolute));
+
+    // RTS
+    map.insert(0x60, OpCode::new(0x60, "RTS", 1, 6, AddressingMode::NoneAddressing));
+
+    // LSR
+    map.insert(0x4A, OpCode::new(0x4A, "LSR", 1, 2, AddressingMode::NoneAddressing));
+    map.insert(0x46, OpCode::new(0x46, "LSR", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0x56, OpCode::new(0x56, "LSR", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0x4E, OpCode::new(0x4E, "LSR", 3, 6, AddressingMode::Absolute));
+    map.insert(0x5E, OpCode::new(0x5E, "LSR", 3, 7, AddressingMode::Absolute_X));
+
+    // NOP
+    map.insert(0xEA, OpCode::new(0xEA, "NOP", 1, 2, AddressingMode::NoneAddressing));
+
+    // ORA
+    map.insert(0x09, OpCode::new(0x09, "ORA", 2, 2, AddressingMode::Immediate));
+    map.insert(0x05, OpCode::new(0x05, "ORA", 2, 3, AddressingMode::ZeroPage));
+    map.insert(0x15, OpCode::new(0x15, "ORA", 2, 4, AddressingMode::ZeroPage_X));
+    map.insert(0x0D, OpCode::new(0x0D, "ORA", 3, 4, AddressingMode::Absolute));
+    map.insert(0x1D, OpCode::new(0x1D, "ORA", 3, 4, AddressingMode::Absolute_X));
+    map.insert(0x19, OpCode::new(0x19, "ORA", 3, 4, AddressingMode::Absolute_Y));
+    map.insert(0x01, OpCode::new(0x01, "ORA", 2, 6, AddressingMode::Indirect_X));
+    map.insert(0x11, OpCode::new(0x11, "ORA", 2, 5, AddressingMode::Indirect_Y));
+
+    // PHA
+    map.insert(0x48, OpCode::new(0x48, "PHA", 1, 3, AddressingMode::NoneAddressing));
+
+    // PHP
+    map.insert(0x08, OpCode::new(0x08, "PHP", 1, 3, AddressingMode::NoneAddressing));
+
+    // PLA
+    map.insert(0x68, OpCode::new(0x68, "PLA", 1, 4, AddressingMode::NoneAddressing));
+
+    // PLP
+    map.insert(0x28, OpCode::new(0x28, "PLP", 1, 4, AddressingMode::NoneAddressing));
+
+    // ROL
+    map.insert(0x2A, OpCode::new(0x2A, "ROL", 1, 2, AddressingMode::NoneAddressing));
+    map.insert(0x26, OpCode::new(0x26, "ROL", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0x36, OpCode::new(0x36, "ROL", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0x2E, OpCode::new(0x2E, "ROL", 3, 6, AddressingMode::Absolute));
+    map.insert(0x3E, OpCode::new(0x3E, "ROL", 3, 7, AddressingMode::Absolute_X));
+
+    // ROR
+    map.insert(0x6A, OpCode::new(0x6A, "ROR", 1, 2, AddressingMode::NoneAddressing));
+    map.insert(0x66, OpCode::new(0x66, "ROR", 2, 5, AddressingMode::ZeroPage));
+    map.insert(0x76, OpCode::new(0x76, "ROR", 2, 6, AddressingMode::ZeroPage_X));
+    map.insert(0x6E, OpCode::new(0x6E, "ROR", 3, 6, AddressingMode::Absolute));
+    map.insert(0x7E, OpCode::new(0x7E, "ROR", 3, 7, AddressingMode::Absolute_X));
+
     map
 });
 
@@ -192,6 +268,7 @@ pub enum AddressingMode {
    Absolute,
    Absolute_X,
    Absolute_Y,
+   Indirect,
    Indirect_X,
    Indirect_Y,
    NoneAddressing,
@@ -203,6 +280,7 @@ impl CPU {
             reg_a: 0,
             status: 0,
             pc: 0,
+            sp: 0xFF,
             reg_x: 0,
             reg_y: 0,
             memory: [0; 0x10000], // Might need to be 0xFFFF
@@ -236,6 +314,10 @@ impl CPU {
                 let output = addr.wrapping_add(self.reg_y as u16);
                 output
             },
+            AddressingMode::Indirect => {
+                let output = self.mem_read_u16(self.pc);
+                output
+            }
             AddressingMode::Indirect_X => {
                 let addr = self.mem_read(self.pc);
                 let ptr = addr.wrapping_add(self.reg_x);
@@ -285,6 +367,41 @@ impl CPU {
 
     }
 
+    // Push one byte to the stack and adjust SP
+    fn stack_push(&mut self, data: u8) {
+        let full_sp: u16 = 0x0100 + (self.sp as u16);
+
+        self.mem_write(full_sp , data);
+
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    // Move SP 1 to make room for 2 byes, push, move SP 1 more to free byte
+    fn stack_push_u16(&mut self, data: u16) {
+        self.sp = self.sp.wrapping_sub(1);
+        let full_sp = 0x0100 + (self.sp as u16);
+
+        self.mem_write_u16(full_sp , data);
+
+        self.sp = self.sp.wrapping_sub(1);
+    }
+
+    fn stack_read(&mut self) -> u8 {
+        let full_sp: u16 = 0x0100 + (self.sp as u16);
+        let output = self.mem_read(full_sp);
+        output
+    }
+
+    fn stack_read_u16(&mut self) -> u16 {
+        let full_sp: u16 = 0x0100 + (self.sp as u16);
+        let output = self.mem_read_u16(full_sp);
+        output
+    }
+
+    fn stack_pop(&mut self) {
+        self.sp = self.sp.wrapping_add(1);
+    }
+
     pub fn load_and_run(&mut self, program: Vec<u8>) {
         self.load(program);
         self.reset();
@@ -294,7 +411,8 @@ impl CPU {
     pub fn reset(&mut self) {
         self.reg_a = 0;
         self.reg_x = 0;
-        self.status = 0;
+        self.status = 0b0010_0000;
+        self.sp = 0xFF;
 
         self.pc = self.mem_read_u16(0xFFFC);
     }
@@ -308,7 +426,7 @@ impl CPU {
         loop {
             // Read the current opcode in binary and convert using our table
             let opscode = self.mem_read(self.pc);
-            println!("Grabbing opscode {} at {} on the pc", self.mem_read(self.pc), self.pc);
+            println!("Grabbing opscode {} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
             let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
 
             // Move the program counter to point to the next address after opscode
@@ -316,6 +434,11 @@ impl CPU {
 
             // Match to the corresponding opscode and run that function
             println!("Running instruction {}", op_object.code);
+
+            // Decides if the standard program counter increment should take place
+            // We don't increment for stuff like JMP that manually set the PC
+            let mut should_inc: bool = true;
+
             match op_object.code {
                 "LDA" => self.lda(&op_object.addressing_mode),
                 "BRK" => break,
@@ -346,13 +469,37 @@ impl CPU {
                 "DEC" => self.dec(&op_object.addressing_mode),
                 "DEX" => self.dex(),
                 "DEY" => self.dey(),
+                "EOR" => self.eor(&op_object.addressing_mode),
+                "INC" => self.inc(&op_object.addressing_mode),
+                "INY" => self.iny(),
+                "JMP" => {
+                    should_inc = self.jmp(&op_object.addressing_mode);
+                },
+                "JSR" => {
+                    should_inc = self.jsr(&op_object.addressing_mode);
+                },
+                "RTS" => {
+                    should_inc = self.rts();
+                },
+                "LSR" => self.lsr(&op_object.addressing_mode),
+                "NOP" => continue,
+                "ORA" => self.ora(&op_object.addressing_mode),
+                "PHA" => self.pha(),
+                "PHP" => self.php(),
+                "PLA" => self.pla(),
+                "PLP" => self.plp(),
+                "ROL" => self.rol(&op_object.addressing_mode),
+                "ROR" => self.ror(&op_object.addressing_mode),
                 _ => panic!("Returned op_code: \"{}\" is not yet implemented...", op_object.code)
             }
 
             // Increment the program counter depending on the addressing mode
             // println!("Performing a pc increment from {} to {}", self.pc, self.pc + (op_object.bytes - 1) as u16);
             // println!("What we add: {}", (op_object.bytes - 1) as u16);
-            self.pc = self.pc.wrapping_add((op_object.bytes - 1) as u16);
+            if should_inc {
+                self.pc = self.pc.wrapping_add((op_object.bytes - 1) as u16);
+            }
+
         }
         // println!("Final PC check {}", self.pc);
     }
@@ -375,6 +522,12 @@ impl CPU {
         self.reg_x = self.reg_x.wrapping_add(1);
 
         self.update_z_and_n_flags(self.reg_x);
+    }
+
+    fn iny(&mut self) {
+        self.reg_y = self.reg_y.wrapping_add(1);
+
+        self.update_z_and_n_flags(self.reg_y);
     }
 
     fn clc(&mut self) {
@@ -597,15 +750,219 @@ impl CPU {
         let param = self.mem_read(addr);
         let output = self.decrement(param);
 
+        self.update_z_and_n_flags(output);
+
         self.mem_write(addr, output);
     }
 
     fn dex(&mut self) {
-        self.reg_x = self.decrement(self.reg_x)
+        self.reg_x = self.decrement(self.reg_x);
+        self.update_z_and_n_flags(self.reg_x);
     }
 
     fn dey(&mut self) {
         self.reg_y = self.decrement(self.reg_y);
+        self.update_z_and_n_flags(self.reg_y);
+    }
+
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        let output = self.reg_a ^ param;
+        self.reg_a = output;
+        self.update_z_and_n_flags(self.reg_a);
+    }
+
+    fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+
+        let output = param.wrapping_add(1); 
+        self.mem_write(addr, output);
+        self.update_z_and_n_flags(output);
+    }
+
+    fn jmp(&mut self, mode: &AddressingMode) -> bool {
+        let addr = self.get_opperand_address(mode);
+
+        // Custom code for the 6502 error for indirect
+        if matches!(mode, &AddressingMode::Absolute) {
+            let next_addr = self.mem_read_u16(self.pc);
+
+            println!("next addr: 0x{:04X}", next_addr);
+
+            // Only adjust if last byte is all ones of indirect address
+            if next_addr & 0x00FF == 0x00FF {
+                let bad_read_addr: u16 = next_addr & 0xFF00;
+                println!("bad_read_addr: 0x{:04X}", bad_read_addr);
+
+                let hi: u8 = self.mem_read(bad_read_addr);
+                let lo: u8 = self.mem_read(next_addr);
+
+                let new_addr: u16 = ((hi as u16) << 8) + (lo as u16);
+                println!("new_addr: 0x{:04X}", new_addr);
+                
+                self.pc = new_addr;
+            } else {
+                self.pc = self.mem_read_u16(addr);
+            }
+        } else {
+            self.pc = self.mem_read_u16(addr);
+        }
+
+        // Tell program not to auto increment
+        false
+    }
+
+    fn jsr(&mut self, mode: &AddressingMode) -> bool {
+        let addr = self.get_opperand_address(mode);
+
+        // Return address -1 is just next instruction -1
+        let return_ptr = self.pc.wrapping_add(1);
+
+        // Push return address to the stack
+        self.stack_push_u16(return_ptr);
+
+        // Update pc to given address
+        self.pc = self.mem_read_u16(addr);
+
+        false
+    }
+
+    fn rts(&mut self) -> bool {
+        // Move the stack back to the next value and read it
+        self.stack_pop();
+        let ptr: u16 = self.stack_read_u16();
+        self.stack_pop();
+        
+
+        let output = ptr.wrapping_add(1);
+        self.pc = output;
+
+        false
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        // If we're modifying the accumulator or not
+        if matches!(mode, AddressingMode::NoneAddressing) { // Accumulator
+            if self.reg_a & 0b0000_0001 == 0b0000_0001 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+            self.reg_a = self.reg_a >> 1;
+            self.update_z_and_n_flags(self.reg_a);
+        } else {
+            let addr = self.get_opperand_address(mode);
+            let param = self.mem_read(addr);
+            if param & 0b0000_0001 == 0b0000_0001 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+
+            let output = param >> 1;
+            self.update_z_and_n_flags(output);
+            self.mem_write(addr, output);
+        }
+    }
+
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_opperand_address(mode);
+        let param = self.mem_read(addr);
+        let output = self.reg_a | param;
+        self.reg_a = output;
+        self.update_z_and_n_flags(self.reg_a);
+    }
+
+    fn pha(&mut self) {
+        self.stack_push(self.reg_a);
+    }
+
+    fn php(&mut self) {
+        self.update_b_flag(true);
+
+        // Push all flags to the stack
+        self.stack_push(self.status);
+    }
+
+    fn pla(&mut self) {
+        self.stack_pop();
+        self.reg_a = self.stack_read();
+        self.update_z_and_n_flags(self.reg_a);
+    }
+
+    fn plp(&mut self) {
+        self.stack_pop();
+        self.status = self.stack_read();
+    }
+
+    fn rol(&mut self, mode: &AddressingMode) {
+        // If we're modifying the accumulator or not
+        if matches!(mode, AddressingMode::NoneAddressing) { // Accumulator
+            let old_c: u8 = self.status & 0b0000_0001;
+            if self.reg_a & 0b1000_0000 == 0b1000_0000 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+
+            self.reg_a = self.reg_a << 1;
+            self.reg_a = self.reg_a | old_c;
+
+            self.update_z_and_n_flags(self.reg_a);
+        } else {
+            let addr = self.get_opperand_address(mode);
+            let param = self.mem_read(addr);
+
+            let old_c: u8 = self.status & 0b0000_0001;
+            if param & 0b1000_0000 == 0b1000_0000 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+
+            let mut output = param << 1;
+            output = output | old_c;
+
+            self.update_z_and_n_flags(output);
+            self.mem_write(addr, output);
+        }
+    }
+
+    fn ror(&mut self, mode: &AddressingMode) {
+        // If we're modifying the accumulator or not
+        if matches!(mode, AddressingMode::NoneAddressing) { // Accumulator
+            let mut old_c: u8 = self.status & 0b0000_0001;
+            old_c = old_c << 7;
+            if self.reg_a & 0b0000_0001 == 0b0000_0001 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+
+            self.reg_a = self.reg_a >> 1;
+            self.reg_a = self.reg_a | old_c;
+
+            self.update_z_and_n_flags(self.reg_a);
+        } else {
+            let addr = self.get_opperand_address(mode);
+            let param = self.mem_read(addr);
+            
+            let mut old_c: u8 = self.status & 0b0000_0001;
+            old_c = old_c << 7;
+            if param & 0b0000_0001 == 0b0000_0001 {
+                self.update_c_bit(true);
+            } else {
+                self.update_c_bit(false);
+            }
+
+            let mut output = param >> 1;
+            output = output | old_c;
+
+            self.update_z_and_n_flags(output);
+            self.mem_write(addr, output);
+        }
     }
 
     fn decrement(&mut self, value: u8) -> u8 {
@@ -663,6 +1020,14 @@ impl CPU {
             self.status = self.status | 0b01000000;
         } else {
             self.status = self.status & 0b10111111;
+        }
+    }
+
+    fn update_b_flag(&mut self, status: bool) {
+        if status {
+            self.status = self.status | 0b0001_0000;
+        } else {
+            self.status = self.status & 0b1110_1111;
         }
     }
 
@@ -1504,6 +1869,603 @@ fn test_dey_wraparound() {
     assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative flag set
 }
 
+#[test]
+fn test_eor_non_zero_non_negative() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0b0000_1100); // 0x0C
+
+    cpu.load_and_run(vec![
+        0xA9, 0b1010_1010, // LDA #$AA
+        0x45, 0x10,        // EOR $10 => 0b1010_1010 ^ 0b0000_1100 = 0b1010_0110
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b1010_0110);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_eor_zero_result() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x20, 0b0101_0101); // 0x55
+
+    cpu.load_and_run(vec![
+        0xA9, 0b0101_0101, // LDA #$55
+        0x45, 0x20,        // EOR $20 => 0b0101_0101 ^ 0b0101_0101 = 0b0000_0000
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_eor_result_negative() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x30, 0b1111_0000); // 0xF0
+
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_1111, // LDA #$0F
+        0x45, 0x30,        // EOR $30 => 0b0000_1111 ^ 0b1111_0000 = 0b1111_1111
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0xFF);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_inc_normal_increment() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0x1A); // Initial value
+
+    cpu.load_and_run(vec![
+        0xE6, 0x10, // INC $10
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x10), 0x1B);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_inc_sets_zero_flag() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x20, 0xFF); // 0xFF + 1 wraps to 0x00
+
+    cpu.load_and_run(vec![
+        0xE6, 0x20, // INC $20
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x20), 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_inc_sets_negative_flag() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x30, 0x7F); // 0x7F + 1 = 0x80 (negative)
+
+    cpu.load_and_run(vec![
+        0xE6, 0x30, // INC $30
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x30), 0x80);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_iny_normal_increment() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0xFFFC, 0x00); // BRK address
+    cpu.mem_write(0xFFFD, 0x80);
+
+    cpu.load_and_run(vec![
+        0xA0, 0x05, // LDY #$05
+        0xC8,       // INY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0x06);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_iny_sets_zero_flag() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0xFFFC, 0x00); // BRK address
+    cpu.mem_write(0xFFFD, 0x80);
+
+    cpu.load_and_run(vec![
+        0xA0, 0xFF, // LDY #$FF
+        0xC8,       // INY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0x00);
+    assert!(cpu.status & 0b0000_0010 != 0); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_iny_sets_negative_flag() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0xFFFC, 0x00); // BRK address
+    cpu.mem_write(0xFFFD, 0x80);
+
+    cpu.load_and_run(vec![
+        0xA0, 0x7F, // LDY #$7F
+        0xC8,       // INY
+        0x00,       // BRK
+    ]);
+
+    assert_eq!(cpu.reg_y, 0x80);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert!(cpu.status & 0b1000_0000 != 0); // Negative set
+}
+
+#[test]
+fn test_jmp_absolute() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0x38,             // SEC
+        0x4C, 0x05, 0x80, // JMP $8005
+        0x18,             // CLC (should be skipped)
+        0xA9, 0x10,       // LDA $10
+        0x00,             // BRK
+    ]);
+
+    // PC should be set to 0x1234 after JMP
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001);
+    assert_eq!(cpu.reg_a, 0x10)
+}
+
+#[test]
+fn test_jmp_indirect() {
+    let mut cpu = CPU::new();
+
+    cpu.mem_write_u16(0x0010, 0x8005);
+
+    cpu.load_and_run(vec![
+        0x38,             // SEC
+        0x6C, 0x10, 0x00, // JMP $8006
+        0x18,             // CLC (should be skipped)
+        0xA9, 0x10,       // LDA $10
+        0x00,             // BRK
+    ]);
+
+    // PC should be set to 0x1234 after JMP
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001);
+    assert_eq!(cpu.reg_a, 0x10)
+}
+
+#[test]
+fn test_broken_jmp() {
+    let mut cpu = CPU::new();
+
+    // Memory stuff for the jump
+    cpu.mem_write(0x3000, 0x40);
+    cpu.mem_write(0x30FF, 0x80);
+    cpu.mem_write(0x3100, 0x50);
+
+    // Storing a brk instruction where the program will end up
+    cpu.mem_write(0x4080, 0x00);
+
+    cpu.load_and_run(vec![
+        0x6C, 0xFF, 0x30   // JMP $30FF
+    ]);
+
+    assert_eq!(cpu.pc, 0x4081)
+}
+
+#[test]
+fn test_jsr_forward_jump() {
+    let mut cpu = CPU::new();
+
+    cpu.mem_write_u16(0x10, 0x8007);
+
+    cpu.load_and_run(vec![
+        0x20, 0x10, 0x00, // JSR $0005 (simulate calling the JRS)
+        0x00,             // BRK (should be skipped)
+        0x00,             // BRK (should be skipped)
+        0x00,             // BRK (should be skipped)
+        0x00,             // BRK (should be skipped)
+        0x38,             // SEC (just to show we jumped here)
+        0x00,             // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry set from SEC
+}
+
+#[test]
+fn test_jsr_backward_jump() {
+    let mut cpu = CPU::new();
+
+    cpu.mem_write_u16(0x10, 0x8001);
+
+    cpu.load_and_run(vec![
+        0x18,             // CLC
+        0xB0, 0x06,       // BCS +5 → to BRK
+        0x38,             // SEC
+        0x20, 0x10, 0x00, // JSR $0001 → call BCS again
+        0x00,             // BRK
+        0x00,             // BRK
+        0x00,             // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // ensure carry is set
+    assert_eq!(cpu.pc, 0x800A);
+}
+
+#[test]
+fn test_rts_sets_carry_and_returns() {
+    let mut cpu = CPU::new();
+
+    cpu.mem_write_u16(0x10, 0x8008);
+
+    cpu.load_and_run(vec![
+        0x18,             // CLC
+        0x20, 0x10, 0x00, // JSR $0008 (SEC)
+        0xB0, 0x05,       // BCS $000B (to LDA)
+        0x00,             // BRK (should be skipped)
+        0x00,             // BRK (should be skipped)
+        0x38,             // SEC (subroutine body)
+        0x60,             // RTS
+        0x00,             // BRK (should be skipped)
+        0xA9, 0x05,       // LDA #$05
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // ensure carry is set
+    assert_eq!(cpu.reg_a, 0x05);
+    assert_eq!(cpu.pc, 0x800E);
+}
+
+#[test]
+fn test_lsr_accumulator_no_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_1010, // LDA #$0A (10)
+        0x4A,             // LSR A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b0000_0101); // 5
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0000); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0000); // no Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b0000_0000); // no Negative
+}
+
+#[test]
+fn test_lsr_accumulator_carry_set() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_0101, // LDA #$05
+        0x4A,             // LSR A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b0000_0010); // 2
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0000); // no Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b0000_0000); // no Negative
+}
+
+#[test]
+fn test_lsr_accumulator_result_zero() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_0001, // LDA #$01
+        0x4A,             // LSR A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x00);
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b0000_0000); // no Negative
+}
+
+#[test]
+fn test_lsr_zero_page() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0b1000_0000); // value at $0010
+
+    cpu.load_and_run(vec![
+        0x46, 0x10, // LSR $10
+        0x00        // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x10), 0b0100_0000);
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0000); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0000); // no Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b0000_0000); // no Negative
+}
+
+#[test]
+fn test_lsr_absolute_sets_zero_and_carry() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x1234, 0x01); // value at $1234
+
+    cpu.load_and_run(vec![
+        0x4E, 0x34, 0x12, // LSR $1234
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x1234), 0x00);
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b0000_0000); // no Negative
+}
+
+#[test]
+fn test_nop_function() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xEA,
+        0xEA,
+        0xEA,
+        0xEA,
+        0x00
+    ]);
+
+    assert_eq!(cpu.pc, 0x8005)
+}
+
+#[test]
+fn test_ora_non_zero_non_negative() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0b0000_1100); // 0x0C
+
+    cpu.load_and_run(vec![
+        0xA9, 0b1010_1010, // LDA #$AA
+        0x05, 0x10,        // ORA $10 => 0b1010_1010 | 0b0000_1100 = 0b1010_1110
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b1010_1110);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_ora_zero_result() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x20, 0b0000_0000); // 0x00
+
+    cpu.load_and_run(vec![
+        0xA9, 0x00,        // LDA #$00
+        0x05, 0x20,        // ORA $20 => 0b0000_0000 | 0b0000_0000 = 0b0000_0000
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_ora_result_negative() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x30, 0b1111_0000); // 0xF0
+
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_1111, // LDA #$0F
+        0x05, 0x30,        // ORA $30 => 0b0000_1111 | 0b1111_0000 = 0b1111_1111
+        0x00,              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0xFF);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_pha_pushes_accumulator() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA9, 0x42, // LDA #$42
+        0x48,       // PHA
+        0x00,       // BRK
+    ]);
+
+    let sp_addr = 0x0100 + cpu.sp as u16 + 1; // Stack grows downward
+    assert_eq!(cpu.mem_read(sp_addr), 0x42);
+}
+
+#[test]
+fn test_php_pushes_status_register() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0x38,       // SEC (Set Carry)
+        0xA9, 0x00, // LDA #$00 to set Zero flag
+        0x08,       // PHP
+        0x00,       // BRK
+    ]);
+
+    let sp_addr = 0x0100 + cpu.sp as u16 + 1;
+    let pushed_status = cpu.mem_read(sp_addr);
+
+    assert_eq!(pushed_status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(pushed_status & 0b0000_0010, 0b0000_0010); // Zero
+}
+
+#[test]
+fn test_pla_sets_accumulator_correctly() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA9, 0x42,       // LDA #$42
+        0x48,             // PHA (push A)
+        0xA9, 0x00,       // LDA #$00 (clear A to prove PLA works)
+        0x68,             // PLA (pull A from stack)
+        0x00,             // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x42);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero flag clear
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative flag clear
+}
+
+#[test]
+fn test_pla_sets_zero_flag() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA9, 0x00,       // LDA #$00
+        0x48,             // PHA
+        0xA9, 0xFF,       // LDA #$FF (so we can tell if PLA works)
+        0x68,             // PLA
+        0x00,             // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x00);
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero set
+    assert_eq!(cpu.status & 0b1000_0000, 0); // Negative clear
+}
+
+#[test]
+fn test_pla_sets_negative_flag() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0xA9, 0x80,       // LDA #$80
+        0x48,             // PHA
+        0xA9, 0x00,       // LDA #$00 (clear A)
+        0x68,             // PLA
+        0x00,             // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0x80);
+    assert_eq!(cpu.status & 0b0000_0010, 0); // Zero clear
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative set
+}
+
+#[test]
+fn test_plp_sets_status_register() {
+    let mut cpu = CPU::new();
+
+    cpu.load_and_run(vec![
+        0x08,             // PHP (push current status)
+        0xA9, 0x00,       // LDA #$00 (clear A)
+        0x28,             // PLP (pull status back)
+        0x00,             // BRK
+    ]);
+
+    // PHP/PLP preserve flags exactly as pushed
+    // Initially, status should be 0b0010_0000 (unused flag set)
+    // So after PLP, status should be the same
+    assert_eq!(cpu.status & 0b0010_0000, 0b0010_0000); // Unused flag still set
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0000); // Zero flag is unset even tho we loaded a 0
+}
+
+#[test]
+fn test_rol_accumulator_no_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0100_0000, // LDA #$40
+        0x2A,             // ROL A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b1000_0000);
+    assert_eq!(cpu.status & 0b0000_0001, 0); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0); // not Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative
+}
+
+#[test]
+fn test_rol_accumulator_sets_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b1000_0000, // LDA #$80
+        0x2A,             // ROL A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b0000_0000);
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // not Negative
+}
+
+#[test]
+fn test_rol_zero_page_with_carry_in() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x10, 0b0000_0001);
+
+    // Set carry flag before ROL
+    cpu.load_and_run(vec![
+        0x38,       // SEC (set carry)
+        0x26, 0x10, // ROL $10
+        0x00        // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x10), 0b0000_0011);
+    assert_eq!(cpu.status & 0b0000_0001, 0); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0); // not Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0); // not Negative
+}
+
+#[test]
+fn test_ror_accumulator_no_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_0010, // LDA #$02
+        0x6A,             // ROR A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b0000_0001);
+    assert_eq!(cpu.status & 0b0000_0001, 0); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0); // not Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0); // not Negative
+}
+
+#[test]
+fn test_ror_accumulator_sets_carry() {
+    let mut cpu = CPU::new();
+    cpu.load_and_run(vec![
+        0xA9, 0b0000_0001, // LDA #$01
+        0x6A,             // ROR A
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.reg_a, 0b0000_0000);
+    assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0b0000_0010); // Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0);           // not Negative
+}
+
+#[test]
+fn test_ror_absolute_with_carry_in() {
+    let mut cpu = CPU::new();
+    cpu.mem_write(0x1234, 0b0000_0000);
+
+    cpu.load_and_run(vec![
+        0x38,             // SEC (set carry)
+        0x6E, 0x34, 0x12, // ROR $1234
+        0x00              // BRK
+    ]);
+
+    assert_eq!(cpu.mem_read(0x1234), 0b1000_0000);
+    assert_eq!(cpu.status & 0b0000_0001, 0); // no Carry
+    assert_eq!(cpu.status & 0b0000_0010, 0); // not Zero
+    assert_eq!(cpu.status & 0b1000_0000, 0b1000_0000); // Negative
+}
 
 
 fn main() {
