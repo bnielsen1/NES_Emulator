@@ -1,5 +1,11 @@
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use sdl2::event::Event;
+use sdl2::EventPump;
+use sdl2::keyboard::Keycode;
+use sdl2::pixels::Color;
+use sdl2::pixels::PixelFormatEnum;
+use rand::Rng;
 
 pub struct CPU {
     // Registers
@@ -476,99 +482,106 @@ impl CPU {
     }
 
     pub fn run(&mut self) {
-        loop {
-            // Read the current opcode in binary and convert using our table
-            let opscode = self.mem_read(self.pc);
-            println!("Grabbing opscode {} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
-            let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
+        self.run_with_callback(|_: &mut CPU| {});
+    }
 
-            // Move the program counter to point to the next address after opscode
-            self.pc += 1;
+    pub fn run_with_callback<F>(&mut self, mut callback: F) 
+        where
+            F: FnMut(&mut CPU),
+        {
+            loop {
+                callback(self);
 
-            // Match to the corresponding opscode and run that function
-            println!("Running instruction {}", op_object.code);
+                // Read the current opcode in binary and convert using our table
+                let opscode = self.mem_read(self.pc);
+                println!("Grabbing opscode {} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
+                let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
 
-            // Decides if the standard program counter increment should take place
-            // We don't increment for stuff like JMP that manually set the PC
-            let mut should_inc: bool = true;
+                // Move the program counter to point to the next address after opscode
+                self.pc += 1;
 
-            match op_object.code {
-                "LDA" => self.lda(&op_object.addressing_mode),
-                "BRK" => break,
-                "TAX" => self.tax(),
-                "INX" => self.inx(),
-                "CLC" => self.clc(),
-                "SEC" => self.sec(),
-                "ASL" => self.asl(&op_object.addressing_mode),
-                "AND" => self.and(&op_object.addressing_mode),
-                "ADC" => self.adc(&op_object.addressing_mode),
-                "BCC" => self.bcc(),
-                "BCS" => self.bcs(),
-                "BEQ" => self.beq(),
-                "BMI" => self.bmi(),
-                "BNE" => self.bne(),
-                "BPL" => self.bpl(),
-                "BIT" => self.bit(&op_object.addressing_mode),
-                "BVC" => self.bvc(),
-                "BVS" => self.bvs(),
-                "CLD" => self.cld(),
-                "CLV" => self.clv(),
-                "CLI" => self.cli(),
-                "CPX" => self.cpx(&op_object.addressing_mode),
-                "CPY" => self.cpy(&op_object.addressing_mode),
-                "CMP" => self.cmp(&op_object.addressing_mode),
-                "LDX" => self.ldx(&op_object.addressing_mode),
-                "LDY" => self.ldy(&op_object.addressing_mode),
-                "DEC" => self.dec(&op_object.addressing_mode),
-                "DEX" => self.dex(),
-                "DEY" => self.dey(),
-                "EOR" => self.eor(&op_object.addressing_mode),
-                "INC" => self.inc(&op_object.addressing_mode),
-                "INY" => self.iny(),
-                "JMP" => {
-                    should_inc = self.jmp(&op_object.addressing_mode);
-                },
-                "JSR" => {
-                    should_inc = self.jsr(&op_object.addressing_mode);
-                },
-                "RTS" => {
-                    should_inc = self.rts();
-                },
-                "LSR" => self.lsr(&op_object.addressing_mode),
-                "NOP" => continue,
-                "ORA" => self.ora(&op_object.addressing_mode),
-                "PHA" => self.pha(),
-                "PHP" => self.php(),
-                "PLA" => self.pla(),
-                "PLP" => self.plp(),
-                "ROL" => self.rol(&op_object.addressing_mode),
-                "ROR" => self.ror(&op_object.addressing_mode),
-                "RTI" => {
-                    should_inc = self.rti();
-                },
-                "SBC" => self.sbc(&op_object.addressing_mode),
-                "SED" => self.sed(),
-                "SEI" => self.sei(),
-                "STA" => self.sta(&op_object.addressing_mode),
-                "STX" => self.stx(&op_object.addressing_mode),
-                "STY" => self.sty(&op_object.addressing_mode),
-                "TAY" => self.tay(),
-                "TSX" => self.tsx(),
-                "TXA" => self.txa(),
-                "TXS" => self.txs(),
-                "TYA" => self.tya(),
-                _ => panic!("Returned op_code: \"{}\" is not yet implemented...", op_object.code)
+                // Match to the corresponding opscode and run that function
+                println!("Running instruction {}", op_object.code);
+
+                // Decides if the standard program counter increment should take place
+                // We don't increment for stuff like JMP that manually set the PC
+                let mut should_inc: bool = true;
+
+                match op_object.code {
+                    "LDA" => self.lda(&op_object.addressing_mode),
+                    "BRK" => break,
+                    "TAX" => self.tax(),
+                    "INX" => self.inx(),
+                    "CLC" => self.clc(),
+                    "SEC" => self.sec(),
+                    "ASL" => self.asl(&op_object.addressing_mode),
+                    "AND" => self.and(&op_object.addressing_mode),
+                    "ADC" => self.adc(&op_object.addressing_mode),
+                    "BCC" => self.bcc(),
+                    "BCS" => self.bcs(),
+                    "BEQ" => self.beq(),
+                    "BMI" => self.bmi(),
+                    "BNE" => self.bne(),
+                    "BPL" => self.bpl(),
+                    "BIT" => self.bit(&op_object.addressing_mode),
+                    "BVC" => self.bvc(),
+                    "BVS" => self.bvs(),
+                    "CLD" => self.cld(),
+                    "CLV" => self.clv(),
+                    "CLI" => self.cli(),
+                    "CPX" => self.cpx(&op_object.addressing_mode),
+                    "CPY" => self.cpy(&op_object.addressing_mode),
+                    "CMP" => self.cmp(&op_object.addressing_mode),
+                    "LDX" => self.ldx(&op_object.addressing_mode),
+                    "LDY" => self.ldy(&op_object.addressing_mode),
+                    "DEC" => self.dec(&op_object.addressing_mode),
+                    "DEX" => self.dex(),
+                    "DEY" => self.dey(),
+                    "EOR" => self.eor(&op_object.addressing_mode),
+                    "INC" => self.inc(&op_object.addressing_mode),
+                    "INY" => self.iny(),
+                    "JMP" => {
+                        should_inc = self.jmp(&op_object.addressing_mode);
+                    },
+                    "JSR" => {
+                        should_inc = self.jsr(&op_object.addressing_mode);
+                    },
+                    "RTS" => {
+                        should_inc = self.rts();
+                    },
+                    "LSR" => self.lsr(&op_object.addressing_mode),
+                    "NOP" => continue,
+                    "ORA" => self.ora(&op_object.addressing_mode),
+                    "PHA" => self.pha(),
+                    "PHP" => self.php(),
+                    "PLA" => self.pla(),
+                    "PLP" => self.plp(),
+                    "ROL" => self.rol(&op_object.addressing_mode),
+                    "ROR" => self.ror(&op_object.addressing_mode),
+                    "RTI" => {
+                        should_inc = self.rti();
+                    },
+                    "SBC" => self.sbc(&op_object.addressing_mode),
+                    "SED" => self.sed(),
+                    "SEI" => self.sei(),
+                    "STA" => self.sta(&op_object.addressing_mode),
+                    "STX" => self.stx(&op_object.addressing_mode),
+                    "STY" => self.sty(&op_object.addressing_mode),
+                    "TAY" => self.tay(),
+                    "TSX" => self.tsx(),
+                    "TXA" => self.txa(),
+                    "TXS" => self.txs(),
+                    "TYA" => self.tya(),
+                    _ => panic!("Returned op_code: \"{}\" is not yet implemented...", op_object.code)
+                }
+
+                // Increment the program counter depending on the addressing mode
+                // println!("Performing a pc increment from {} to {}", self.pc, self.pc + (op_object.bytes - 1) as u16);
+                // println!("What we add: {}", (op_object.bytes - 1) as u16);
+                if should_inc {
+                    self.pc = self.pc.wrapping_add((op_object.bytes - 1) as u16);
+                }
             }
-
-            // Increment the program counter depending on the addressing mode
-            // println!("Performing a pc increment from {} to {}", self.pc, self.pc + (op_object.bytes - 1) as u16);
-            // println!("What we add: {}", (op_object.bytes - 1) as u16);
-            if should_inc {
-                self.pc = self.pc.wrapping_add((op_object.bytes - 1) as u16);
-            }
-
-        }
-        // println!("Final PC check {}", self.pc);
     }
 
     // Begin instruction set implementations
@@ -828,18 +841,18 @@ impl CPU {
         if matches!(mode, &AddressingMode::Absolute) {
             let next_addr = self.mem_read_u16(self.pc);
 
-            println!("next addr: 0x{:04X}", next_addr);
+            // println!("next addr: 0x{:04X}", next_addr);
 
             // Only adjust if last byte is all ones of indirect address
             if next_addr & 0x00FF == 0x00FF {
                 let bad_read_addr: u16 = next_addr & 0xFF00;
-                println!("bad_read_addr: 0x{:04X}", bad_read_addr);
+                // println!("bad_read_addr: 0x{:04X}", bad_read_addr);
 
                 let hi: u8 = self.mem_read(bad_read_addr);
                 let lo: u8 = self.mem_read(next_addr);
 
                 let new_addr: u16 = ((hi as u16) << 8) + (lo as u16);
-                println!("new_addr: 0x{:04X}", new_addr);
+                // println!("new_addr: 0x{:04X}", new_addr);
                 
                 self.pc = new_addr;
             } else {
@@ -854,7 +867,9 @@ impl CPU {
     }
 
     fn jsr(&mut self, mode: &AddressingMode) -> bool {
+        println!("pc points to 0x{:04X} during jsr", self.pc);
         let addr = self.get_opperand_address(mode);
+        println!("JSR is attempting to jump to address: 0x{:04X}", addr);
 
         // Return address -1 is just next instruction -1
         let return_ptr = self.pc.wrapping_add(1);
@@ -863,7 +878,7 @@ impl CPU {
         self.stack_push_u16(return_ptr);
 
         // Update pc to given address
-        self.pc = self.mem_read_u16(addr);
+        self.pc = addr;
 
         false
     }
@@ -1192,27 +1207,6 @@ impl CPU {
     }
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 #[cfg(test)]
@@ -2224,10 +2218,8 @@ fn test_broken_jmp() {
 fn test_jsr_forward_jump() {
     let mut cpu = CPU::new();
 
-    cpu.mem_write_u16(0x10, 0x8007);
-
     cpu.load_and_run(vec![
-        0x20, 0x10, 0x00, // JSR $0005 (simulate calling the JRS)
+        0x20, 0x07, 0x80, // JSR $0005 (simulate calling the JRS)
         0x00,             // BRK (should be skipped)
         0x00,             // BRK (should be skipped)
         0x00,             // BRK (should be skipped)
@@ -2243,13 +2235,11 @@ fn test_jsr_forward_jump() {
 fn test_jsr_backward_jump() {
     let mut cpu = CPU::new();
 
-    cpu.mem_write_u16(0x10, 0x8001);
-
     cpu.load_and_run(vec![
         0x18,             // CLC
         0xB0, 0x06,       // BCS +5 → to BRK
         0x38,             // SEC
-        0x20, 0x10, 0x00, // JSR $0001 → call BCS again
+        0x20, 0x01, 0x80, // JSR $0001 → call BCS again
         0x00,             // BRK
         0x00,             // BRK
         0x00,             // BRK
@@ -2263,11 +2253,9 @@ fn test_jsr_backward_jump() {
 fn test_rts_sets_carry_and_returns() {
     let mut cpu = CPU::new();
 
-    cpu.mem_write_u16(0x10, 0x8008);
-
     cpu.load_and_run(vec![
         0x18,             // CLC
-        0x20, 0x10, 0x00, // JSR $0008 (SEC)
+        0x20, 0x08, 0x80, // JSR $0008 (SEC)
         0xB0, 0x05,       // BCS $000B (to LDA)
         0x00,             // BRK (should be skipped)
         0x00,             // BRK (should be skipped)
@@ -2868,7 +2856,6 @@ mod sty_tests {
     }
 }
 
-
 fn main() {
-    println!("Hello, world!");
+    println!("pee pee poo poo");
 }
