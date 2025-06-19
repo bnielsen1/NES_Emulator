@@ -1,5 +1,5 @@
 
-use crate::rom::Rom;
+use crate::rom::{Mirroring, Rom};
 
 const RAM: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
@@ -7,6 +7,16 @@ const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
 const ROM_MEM_START: u16 = 0x8000;
 const ROM_MEM_END: u16 = 0xFFFF;
+
+// Generates a dummy rom for when a rom isn't needed
+fn test_rom_gen() -> Rom {
+    Rom {
+        prg_rom: vec![0xEA; 0x4000], // NOPs
+        chr_rom: vec![],
+        mapper: 0,
+        screen_mirroring: Mirroring::HORIZONTAL,
+    }
+}
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
@@ -21,6 +31,14 @@ impl Bus {
         }
     }
 
+    // Call instead of new if you don't need to use a ROM
+    pub fn new_fake_rom() -> Self {
+        Bus {
+            cpu_vram: [0; 2048],
+            rom: test_rom_gen(),
+        }
+    }
+
     fn read_prg_rom(&self, mut addr: u16) -> u8 {
         addr -= ROM_MEM_START;
         // Remember 0x4000 == 16kB (a standard size for prg)
@@ -28,6 +46,16 @@ impl Bus {
             addr = addr % 0x4000;
         }
         self.rom.prg_rom[addr as usize]
+    }
+
+    // Used only for test cases
+    fn write_prg_rom(&mut self, mut addr: u16, data: u8) {
+        addr -= ROM_MEM_START;
+        // Remember 0x4000 == 16kB (a standard size for prg)
+        if self.rom.prg_rom.len() == 0x4000 && addr >= 0x4000 {
+            addr = addr % 0x4000;
+        }
+        self.rom.prg_rom[addr as usize] = data;
     }
 }
 
@@ -37,6 +65,7 @@ pub trait Mem {
     fn mem_write(&mut self, addr: u16, data: u8);
     fn mem_read_u16(&self, addr: u16) -> u16;
     fn mem_write_u16(&mut self, addr: u16, data: u16);
+    fn mem_write_test(&mut self, addr: u16, data: u8);
 }
 
 // 
@@ -85,6 +114,11 @@ impl Mem for Bus {
                 println!("Attempted to write memory at unknown address 0x{:04X}", addr);
             }
         }
+    }
+
+    // Allows writing to cartridge ROM space (ONLY USED FOR TEST CASES)
+    fn mem_write_test(&mut self, addr: u16, data: u8) {
+        self.write_prg_rom(addr, data);
     }
 
     fn mem_write_u16(&mut self, addr: u16, data: u16) {
