@@ -1,11 +1,11 @@
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use sdl2::event::Event;
-use sdl2::EventPump;
-use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
-use sdl2::pixels::PixelFormatEnum;
-use rand::Rng;
+
+mod rom;
+use crate::rom::Rom;
+
+mod bus;
+use bus::{Bus, Mem};
 
 pub struct CPU {
     // Registers
@@ -15,7 +15,7 @@ pub struct CPU {
     pub status: u8, // Each bit stores the 7 status flags (ex. Z = zero flag)
     pub pc: u16, // stores mem address of next byte of code (16 bits cause ram size)
     pub sp: u8,
-    memory: [u8; 0x10000] // Might need to be 0xFFFF
+    pub bus: Bus,
 }
 
 // status register bit values
@@ -334,7 +334,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(rom: Rom) -> Self {
         CPU {
             reg_a: 0,
             status: 0,
@@ -342,7 +342,7 @@ impl CPU {
             sp: 0xFF,
             reg_x: 0,
             reg_y: 0,
-            memory: [0; 0x10000], // Might need to be 0xFFFF
+            bus: Bus::new(rom),
         }
     }
 
@@ -404,25 +404,19 @@ impl CPU {
     // Memory related functions
 
     fn mem_read(&self, addr: u16) -> u8 {
-        return self.memory[addr as usize];
+        self.bus.mem_read(addr)
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
+        self.bus.mem_write(addr, data);
     }
 
-    fn mem_read_u16(&mut self, pos: u16) -> u16 {
-        let lo = self.mem_read(pos) as u16;
-        let hi = self.mem_read(pos + 1) as u16;
-        (hi << 8) | lo
+    fn mem_read_u16(&mut self, addr: u16) -> u16 {
+        self.bus.mem_read_u16(addr)
     }
 
-    fn mem_write_u16(&mut self, pos: u16, data: u16) {
-        let hi = (data >> 8) as u8;
-        let lo = (data & 0x00ff) as u8;
-
-        self.mem_write(pos, lo);
-        self.mem_write(pos + 1, hi);
+    fn mem_write_u16(&mut self, addr: u16, data: u16) {
+        self.bus.mem_write_u16(addr, data);
 
     }
 
@@ -477,8 +471,10 @@ impl CPU {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+        for i in 0..(program.len() as u16) {
+            self.mem_write(0x0000+i, program[i as usize]);
+        }
+        self.mem_write_u16(0xFFFC, 0x0000);
     }
 
     pub fn run(&mut self) {
@@ -1484,7 +1480,7 @@ fn test_bcc_branch_taken() {
     cpu.load_and_run(vec![0x18, 0x90, 0x01, 0xEA, 0x00]);
 
     // Since carry is clear, branch taken: PC after branch = 0x04 (BRK)
-    assert_eq!(cpu.pc, 0x8005);
+    assert_eq!(cpu.pc, 0x0005);
 }
 
 #[test]
@@ -1500,7 +1496,7 @@ fn test_bcc_branch_not_taken() {
     cpu.load_and_run(vec![0x38, 0x90, 0x01, 0x00, 0xEA]);
 
     // Carry set means no branch, so next executed instruction at 0x03 (BRK)
-    assert_eq!(cpu.pc, 0x8004);
+    assert_eq!(cpu.pc, 0x0004);
 }
 
 #[test]
@@ -1520,7 +1516,7 @@ fn test_bcc_branch_negative_offset() {
     // After executing CLC + BCC, branch jumps backward 3 from PC after operand (which is at 0x03)
     // So PC = 0x03 - 3 = 0x00, so next instruction at 0x00, which is CLC again.
     // This will cause a loop, so let’s just test the PC after running once.
-    assert_eq!(cpu.pc, 0x8008);
+    assert_eq!(cpu.pc, 0x0008);
 }
 
 #[test]
@@ -1536,7 +1532,7 @@ fn test_bcs_branch_taken() {
     cpu.load_and_run(vec![0x38, 0xB0, 0x01, 0xEA, 0x00]);
 
     // Since carry is clear, branch taken: PC after branch = 0x04 (BRK)
-    assert_eq!(cpu.pc, 0x8005);
+    assert_eq!(cpu.pc, 0x0005);
 }
 
 #[test]
@@ -1552,7 +1548,7 @@ fn test_bcs_branch_not_taken() {
     cpu.load_and_run(vec![0x18, 0xB0, 0x01, 0x00, 0xEA]);
 
     // Carry set means no branch, so next executed instruction at 0x03 (BRK)
-    assert_eq!(cpu.pc, 0x8004);
+    assert_eq!(cpu.pc, 0x0004);
 }
 
 #[test]
@@ -1572,7 +1568,7 @@ fn test_bcs_branch_negative_offset() {
     // After executing CLC + BCC, branch jumps backward 3 from PC after operand (which is at 0x03)
     // So PC = 0x03 - 3 = 0x00, so next instruction at 0x00, which is CLC again.
     // This will cause a loop, so let’s just test the PC after running once.
-    assert_eq!(cpu.pc, 0x8008);
+    assert_eq!(cpu.pc, 0x0008);
 }
 
 #[test]
@@ -1588,7 +1584,7 @@ fn test_beq_branch_taken_forward() {
     cpu.load_and_run(vec![0xA9, 0x00, 0xF0, 0x01, 0xEA, 0x00]);
 
     // BEQ is taken, so PC should be at BRK after branch
-    assert_eq!(cpu.pc, 0x8006);
+    assert_eq!(cpu.pc, 0x0006);
 }
 
 #[test]
@@ -1604,7 +1600,7 @@ fn test_beq_branch_not_taken() {
     cpu.load_and_run(vec![0xA9, 0x01, 0xF0, 0x02, 0x00, 0xEA]);
 
     // BEQ not taken, so PC should continue to BRK
-    assert_eq!(cpu.pc, 0x8005);
+    assert_eq!(cpu.pc, 0x0005);
 }
 
 // BIT TESTING
@@ -2180,7 +2176,7 @@ fn test_jmp_absolute() {
 fn test_jmp_indirect() {
     let mut cpu = CPU::new();
 
-    cpu.mem_write_u16(0x0010, 0x8005);
+    cpu.mem_write_u16(0x0010, 0x0005);
 
     cpu.load_and_run(vec![
         0x38,             // SEC
@@ -2200,18 +2196,18 @@ fn test_broken_jmp() {
     let mut cpu = CPU::new();
 
     // Memory stuff for the jump
-    cpu.mem_write(0x3000, 0x40);
-    cpu.mem_write(0x30FF, 0x80);
-    cpu.mem_write(0x3100, 0x50);
+    cpu.mem_write(0x1000, 0x10);
+    cpu.mem_write(0x10FF, 0x80);
+    cpu.mem_write(0x1100, 0x01);
 
     // Storing a brk instruction where the program will end up
-    cpu.mem_write(0x4080, 0x00);
+    cpu.mem_write(0x1080, 0x00);
 
     cpu.load_and_run(vec![
-        0x6C, 0xFF, 0x30   // JMP $30FF
+        0x6C, 0xFF, 0x10   // JMP $10FF
     ]);
 
-    assert_eq!(cpu.pc, 0x4081)
+    assert_eq!(cpu.pc, 0x1081)
 }
 
 #[test]
@@ -2246,7 +2242,7 @@ fn test_jsr_backward_jump() {
     ]);
 
     assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // ensure carry is set
-    assert_eq!(cpu.pc, 0x800A);
+    assert_eq!(cpu.pc, 0x000A);
 }
 
 #[test]
@@ -2268,7 +2264,7 @@ fn test_rts_sets_carry_and_returns() {
 
     assert_eq!(cpu.status & 0b0000_0001, 0b0000_0001); // ensure carry is set
     assert_eq!(cpu.reg_a, 0x05);
-    assert_eq!(cpu.pc, 0x800E);
+    assert_eq!(cpu.pc, 0x000E);
 }
 
 #[test]
@@ -2360,7 +2356,7 @@ fn test_nop_function() {
         0x00
     ]);
 
-    assert_eq!(cpu.pc, 0x8005)
+    assert_eq!(cpu.pc, 0x0005)
 }
 
 #[test]
