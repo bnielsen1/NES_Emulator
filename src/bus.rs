@@ -20,7 +20,7 @@ fn test_rom_gen() -> Rom {
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
-    rom: Rom,
+    pub rom: Rom,
 }
 
 impl Bus {
@@ -39,7 +39,7 @@ impl Bus {
         }
     }
 
-    fn read_prg_rom(&self, mut addr: u16) -> u8 {
+    pub fn read_prg_rom(&self, mut addr: u16) -> u8 {
         addr -= ROM_MEM_START;
         // Remember 0x4000 == 16kB (a standard size for prg)
         if self.rom.prg_rom.len() == 0x4000 && addr >= 0x4000 {

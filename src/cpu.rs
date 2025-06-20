@@ -412,7 +412,7 @@ impl CPU {
 
     // Memory related functions
 
-    fn mem_read(&self, addr: u16) -> u8 {
+    pub fn mem_read(&self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
 
@@ -484,7 +484,7 @@ impl CPU {
         self.status = 0b0010_0000;
         self.sp = 0xFF;
 
-        self.pc = 0x8000;
+        self.pc = 0x8600;
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
