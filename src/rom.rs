@@ -18,7 +18,7 @@ pub struct Rom {
 }
 
 impl Rom {
-    pub fn new(&self, raw: &Vec<u8>) -> Result<Rom, String> {
+    pub fn new(raw: &Vec<u8>) -> Result<Rom, String> {
         if &raw[0..4] != NES_TAG {
             return Err("File is not in iNES file format".to_string());
         }
@@ -46,6 +46,9 @@ impl Rom {
         let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
+        println!("PRG ROM INFORMATION: start: {} size: {}", prg_rom_start, prg_rom_size);
+        println!("CHR ROM INFORMATION: start: {} size: {}", chr_rom_start, chr_rom_size);
+
         Ok(Rom {
             prg_rom: raw[prg_rom_start..(prg_rom_start+prg_rom_size)].to_vec(),
             chr_rom: raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec(),
@@ -53,13 +56,15 @@ impl Rom {
             screen_mirroring
         })
     }
-    
-    pub fn new_test(&self, test: &Vec<u8>) -> Result<Rom, String> {
+
+    pub fn new_test(test: Vec<u8>) -> Result<Rom, String> {
         let mut output_raw = NES_TAG.to_vec(); // NES FILE RECOGNITION
         output_raw.push(0x01); // Rom has only 1 16kB ROM bank
         output_raw.push(0x00); // Rom has no CHR rom banks (ppu data)
         output_raw.push(0b1111_0000); // Byte 6 (bit 2 set to 0 for NO trainer)
         output_raw.push(0b1111_0000); // Byte 7 (last 4 bits tell EMU we're on iNES 1.0)
+        output_raw.push(0x00);
+        output_raw.push(0x00);
         output_raw.extend(std::iter::repeat(0).take(6)); // Add 6 0s for reserved
 
         // Insert PRG Rom data
@@ -72,6 +77,6 @@ impl Rom {
         output_raw.extend(std::iter::repeat(0).take(num_brks));
 
         // Send our raw "test rom" to become an actual 'Rom' object and return
-        self.new(&output_raw)
+        Self::new(&output_raw)
     }
 }
