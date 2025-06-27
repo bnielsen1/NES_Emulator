@@ -484,7 +484,7 @@ impl CPU {
         self.status = 0b0010_0000;
         self.sp = 0xFF;
 
-        self.pc = 0x8600;
+        self.pc = 0x8000;
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
@@ -848,7 +848,7 @@ impl CPU {
 
     fn jmp(&mut self, mode: &AddressingMode) -> bool {
         let addr = self.get_opperand_address(mode);
-        println!("Address read by opperand: 0x{:04X}", addr);
+        // println!("Address read by opperand: 0x{:04X}", addr);
 
         // Custom code for the 6502 error for indirect
         if matches!(mode, &AddressingMode::Absolute) {

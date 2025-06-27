@@ -16,31 +16,92 @@ pub struct NesPPU {
     pub vram: [u8; 2048],
     pub oam_data: [u8; 256],
     internal_data_buf: u8, // Storage for 0x2007 reads
+    oam_addr: u8, // OAM Address written by 0x2003 and used by 0x2004
+    pub ppu_status: u8,
 
     pub mirroring: Mirroring,
+    cycles: usize,
+    scanline: u16,
 
     addr: AddrRegister,
+    status: StatusRegister,
+    scroll: ScrollRegister,
+    mask: MaskRegister,
     pub ctrl: ControlRegister,
 }
 
 impl NesPPU {
+
+    pub fn new_empty_rom() -> Self {
+        NesPPU {
+            chr_rom: vec![0; 2048],
+            mirroring: Mirroring::HORIZONTAL,
+            internal_data_buf: 0,
+            oam_addr: 0,
+            ppu_status: 0b0000_0000,
+            vram: [0; 2048],
+            oam_data: [0; 64 * 4],
+            palette_table: [0; 32],
+            cycles: 0,
+            scanline: 0,
+            addr: AddrRegister::new(),
+            status: StatusRegister::new(),
+            scroll: ScrollRegister::new(),
+            mask: MaskRegister::new(),
+            ctrl: ControlRegister::new(),
+        }
+    }
+
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
         NesPPU {
             chr_rom: chr_rom,
             mirroring: mirroring,
             internal_data_buf: 0,
+            oam_addr: 0,
+            ppu_status: 0b0000_0000,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             palette_table: [0; 32],
+            cycles: 0,
+            scanline: 0,
             addr: AddrRegister::new(),
+            status: StatusRegister::new(),
+            scroll: ScrollRegister::new(),
+            mask: MaskRegister::new(),
             ctrl: ControlRegister::new(),
         }
     }
 
+    pub fn tick(&mut self, cycles: usize) -> bool {
+        self.cycles += cycles;
+        if self.cycles >= 341 {
+            self.cycles -= 341;
+
+            self.scanline += 1;
+            if self.scanline == 241 { // Trigger interupt at 241st scanline (offscreen)
+                if self.ctrl.is_generate_nmi() { // If we should be triggering vblank interrupts
+                    self.status.set_vblank_started(true);
+                    todo!("Trigger an NMI interrupt here on the CPU")
+                }
+            }
+
+            if self.scanline >= 262 {
+                // Reset out scanlines
+                self.scanline = 0;
+                self.status.set_vblank_started(false);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // Handles 0x2006 write (updates addr 0x2007 reads or writes from)
     pub fn write_to_ppu_addr(&mut self, value: u8) {
         self.addr.update(value);
     }
 
+    // Handles 0x2000 writes
     pub fn write_to_ctrl(&mut self, value: u8) {
         self.ctrl.update(value);
     }
@@ -50,6 +111,7 @@ impl NesPPU {
         self.addr.increment(self.ctrl.vram_addr_increment());
     }
 
+    // For read upon 0x2007
     pub fn read_data(&mut self) -> u8 {
         let addr = self.addr.get();
         self.increment_vram_addr();
@@ -73,6 +135,7 @@ impl NesPPU {
         }
     }
 
+    // For write on 0x2007
     pub fn write_to_data(&mut self, data: u8) {
         let addr = self.addr.get();
         self.increment_vram_addr();
@@ -89,6 +152,54 @@ impl NesPPU {
                 self.palette_table[(addr - 0x3F00) as usize] = data
             },
             _ => panic!("Unexpected read access to mirrored space {}", addr),
+        }
+    }
+
+    // Handles 0x2002 reads
+    pub fn read_status(&mut self) -> u8 {
+
+        // Reset 0x2005 0x2006 latches
+        self.addr.reset_latch();
+        self.scroll.reset_latch();
+        
+        // Return output
+        self.status.read()
+    }
+
+    // Handles 0x2005 writes
+    pub fn write_scroll(&mut self, data: u8) {
+        self.scroll.write(data);
+    }
+
+    // Handles 0x2001 writes
+    pub fn write_mask(&mut self, data: u8) {
+        self.mask.update(data);
+    }
+
+    // Handles 0x2003 writes
+    pub fn oam_addr_write(&mut self, data: u8) {
+        println!("Writing to OAM ADDR: 0x{:02X}", data);
+        self.oam_addr = data;
+    }
+
+    // Handles 0x2004 reads
+    pub fn oam_data_read(&self) -> u8 {
+        println!("Reading OAM DATA from 0x{:02X}", self.oam_addr);
+        println!("Read OAM DATA 0x{:02X}", self.oam_data[self.oam_addr as usize]);
+        self.oam_data[self.oam_addr as usize]
+    }
+
+    // Handles 0x2004 writes
+    pub fn oam_data_write(&mut self, data: u8) {
+        println!("Writing OAM DATA 0x{:02X} to 0x{:02X}", data, self.oam_addr);
+        self.oam_data[self.oam_addr as usize] = data;
+        self.oam_addr = self.oam_addr.wrapping_add(1);
+    }
+
+    pub fn oam_dma_write(&mut self, data: &[u8; 256]) {
+        for byte in data.iter() {
+            self.oam_data[self.oam_addr as usize] = *byte;
+            self.oam_addr = self.oam_addr.wrapping_add(1);
         }
     }
 
@@ -142,6 +253,7 @@ impl AddrRegister {
         if self.get() > 0x3FFF {
             self.set(self.get() & 0b11111111111111);
         }
+        self.hi_ptr = !self.hi_ptr;
     }
 
     pub fn increment(&mut self, inc: u8) {
@@ -157,6 +269,97 @@ impl AddrRegister {
 
     pub fn reset_latch(&mut self) {
         self.hi_ptr = true;
+    }
+}
+
+bitflags! {
+
+   // 7  bit  0
+   // ---- ----
+   // VPHB SINN
+   // |||| ||||
+   // |||| ||++- Base nametable address
+   // |||| ||    (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+   // |||| |+--- VRAM address increment per CPU read/write of PPUDATA
+   // |||| |     (0: add 1, going across; 1: add 32, going down)
+   // |||| +---- Sprite pattern table address for 8x8 sprites
+   // ||||       (0: $0000; 1: $1000; ignored in 8x16 mode)
+   // |||+------ Background pattern table address (0: $0000; 1: $1000)
+   // ||+------- Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
+   // |+-------- PPU master/slave select
+   // |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
+   // +--------- Generate an NMI at the start of the
+   //            vertical blanking interval (0: off; 1: on)
+   pub struct StatusRegister: u8 {
+       const UNUSED1                 = 0b0000_0001;
+       const UNUSED2                 = 0b0000_0010;
+       const UNUSED3                 = 0b0000_0100;
+       const UNUSED4                 = 0b0000_1000;
+       const UNUSED5                 = 0b0001_0000;
+       const SPRITE_OVERFLOW         = 0b0010_0000;
+       const SPRITE_ZERO_HIT         = 0b0100_0000;
+       const VBLANK_STARTED          = 0b1000_0000;
+   }
+}
+
+impl StatusRegister {
+    pub fn new() -> Self {
+        StatusRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    // Called upon 0x2002 Read
+    pub fn read(&mut self) -> u8 {
+        let output = self.bits(); // Store orignal state
+
+        // Clear Vblank flag on read
+        self.remove(StatusRegister::VBLANK_STARTED);
+
+        output
+    }
+
+    // Used to read current state for debugging purposes
+    pub fn current_val(&self) -> u8 {
+        self.bits()
+    }
+
+    pub fn is_sprite_overflow(&self) -> bool {
+        self.contains(StatusRegister::SPRITE_OVERFLOW)
+    }
+
+    pub fn is_sprite_zero_hit(&self) -> bool {
+        self.contains(StatusRegister::SPRITE_ZERO_HIT)
+    }
+
+    pub fn is_vblank_started(&self) -> bool {
+        self.contains(StatusRegister::VBLANK_STARTED)
+    }
+
+    pub fn set_sprite_overflow(&mut self, value: bool) {
+        if value {
+            self.insert(StatusRegister::SPRITE_OVERFLOW);
+        } else {
+            self.remove(StatusRegister::SPRITE_OVERFLOW);
+        }
+    }
+
+    pub fn set_sprite_zero_hit(&mut self, value: bool) {
+        if value {
+            self.insert(StatusRegister::SPRITE_ZERO_HIT);
+        } else {
+            self.remove(StatusRegister::SPRITE_ZERO_HIT);
+        }
+    }
+
+    pub fn set_vblank_started(&mut self, value: bool) {
+        if value {
+            self.insert(StatusRegister::VBLANK_STARTED);
+        } else {
+            self.remove(StatusRegister::VBLANK_STARTED);
+        }
+    }
+
+    pub fn update(&mut self, data: u8) {
+        *self = StatusRegister::from_bits_truncate(data);
     }
 }
 
@@ -195,6 +398,34 @@ impl ControlRegister {
         ControlRegister::from_bits_truncate(0b0000_0000)
     }
 
+    pub fn is_nametable1(&self) -> bool {
+        self.contains(ControlRegister::NAMETABLE1)
+    }
+
+    pub fn is_nametable2(&self) -> bool {
+        self.contains(ControlRegister::NAMETABLE2)
+    }
+
+    pub fn is_sprite_pattern_addr(&self) -> bool {
+        self.contains(ControlRegister::SPRITE_PATTERN_ADDR)
+    }
+
+    pub fn is_background_pattern_addr(&self) -> bool {
+        self.contains(ControlRegister::BACKROUND_PATTERN_ADDR)
+    }
+
+    pub fn is_sprite_size(&self) -> bool {
+        self.contains(ControlRegister::SPRITE_SIZE)
+    }
+
+    pub fn is_master_slave_select(&self) -> bool {
+        self.contains(ControlRegister::MASTER_SLAVE_SELECT)
+    }
+
+    pub fn is_generate_nmi(&self) -> bool {
+        self.contains(ControlRegister::GENERATE_NMI)
+    }
+
     pub fn vram_addr_increment(&self) -> u8 {
         if !self.contains(ControlRegister::VRAM_ADD_INCREMENT) {
             1
@@ -205,5 +436,309 @@ impl ControlRegister {
 
     pub fn update(&mut self, data: u8) {
         *self = ControlRegister::from_bits_truncate(data);
+    }
+}
+
+bitflags! {
+
+    // 7  bit  0
+    // ---- ----
+    // BGRs bMmG
+    // |||| ||||
+    // |||| |||+- Greyscale (0: normal color, 1: greyscale)
+    // |||| ||+-- 1: Show background in leftmost 8 pixels of screen, 0: Hide
+    // |||| |+--- 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+    // |||| +---- 1: Enable background rendering
+    // |||+------ 1: Enable sprite rendering
+    // ||+------- Emphasize red (green on PAL/Dendy)
+    // |+-------- Emphasize green (red on PAL/Dendy)
+    // +--------- Emphasize blue
+   pub struct MaskRegister: u8 {
+       const GREYSCALE               = 0b0000_0001;
+       const SHOW_LEFT_BACKGROUND    = 0b0000_0010;
+       const SHOW_LEFT_SPRITES       = 0b0000_0100;
+       const BACKGROUND_RENDERING    = 0b0000_1000;
+       const SPRITE_RENDERING        = 0b0001_0000;
+       const EMPH_RED                = 0b0010_0000;
+       const EMPH_GREEN              = 0b0100_0000;
+       const EMPH_BLUE               = 0b1000_0000;
+   }
+}
+
+impl MaskRegister {
+    pub fn new() -> Self {
+        MaskRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    pub fn is_greyscale(&self) -> bool {
+        self.contains(MaskRegister::GREYSCALE)
+    }
+
+    pub fn is_left_background(&self) -> bool {
+        self.contains(MaskRegister::SHOW_LEFT_BACKGROUND)
+    }
+
+    pub fn is_left_sprites(&self) -> bool {
+        self.contains(MaskRegister::SHOW_LEFT_SPRITES)
+    }
+
+    pub fn is_background_rendering(&self) -> bool {
+        self.contains(MaskRegister::BACKGROUND_RENDERING)
+    }
+
+    pub fn is_sprite_rendering(&self) -> bool {
+        self.contains(MaskRegister::SPRITE_RENDERING)
+    }
+
+    pub fn is_emphasizing_red(&self) -> bool {
+        self.contains(MaskRegister::EMPH_RED)
+    }
+
+    pub fn is_emphasizing_green(&self) -> bool {
+        self.contains(MaskRegister::EMPH_GREEN)
+    }
+
+    pub fn is_emphasizing_blue(&self) -> bool {
+        self.contains(MaskRegister::EMPH_BLUE)
+    }
+
+    pub fn update(&mut self, data: u8) {
+        *self = MaskRegister::from_bits_truncate(data);
+    }
+}
+
+pub struct ScrollRegister { // hi ptr tracks if we've received 1 of 2 bytes yet
+    x_val: u8,
+    y_val: u8,
+    latch: bool
+}
+
+impl ScrollRegister {
+    pub fn new() -> Self {
+        ScrollRegister {
+            x_val: 0,
+            y_val: 0,
+            latch: true,
+        }
+    }
+
+    pub fn write(&mut self, data: u8) {
+        if self.latch {
+            self.x_val = data;
+        } else {
+            self.y_val = data;
+        }
+
+        self.latch = !self.latch;
+    }
+
+    pub fn read(&self) -> (u8, u8) {
+        (self.x_val, self.y_val)
+    }
+
+    pub fn reset_latch(&mut self) {
+        self.latch = true;
+    }
+
+}
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+
+    #[test]
+    fn test_ppu_vram_writes() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ppu_addr(0x23);
+        ppu.write_to_ppu_addr(0x05);
+        ppu.write_to_data(0x66);
+
+        assert_eq!(ppu.vram[0x0305], 0x66);
+    }
+
+    #[test]
+    fn test_ppu_vram_reads() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ctrl(0);
+        ppu.vram[0x0305] = 0x66;
+
+        ppu.write_to_ppu_addr(0x23);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load_into_buffer
+        assert_eq!(ppu.addr.get(), 0x2306);
+        assert_eq!(ppu.read_data(), 0x66);
+    }
+
+    #[test]
+    fn test_ppu_vram_reads_cross_page() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ctrl(0);
+        ppu.vram[0x01ff] = 0x66;
+        ppu.vram[0x0200] = 0x77;
+
+        ppu.write_to_ppu_addr(0x21);
+        ppu.write_to_ppu_addr(0xff);
+
+        ppu.read_data(); //load_into_buffer
+        assert_eq!(ppu.read_data(), 0x66);
+        assert_eq!(ppu.read_data(), 0x77);
+    }
+
+    #[test]
+    fn test_ppu_vram_reads_step_32() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ctrl(0b100);
+        ppu.vram[0x01ff] = 0x66;
+        ppu.vram[0x01ff + 32] = 0x77;
+        ppu.vram[0x01ff + 64] = 0x88;
+
+        ppu.write_to_ppu_addr(0x21);
+        ppu.write_to_ppu_addr(0xff);
+
+        ppu.read_data(); //load_into_buffer
+        assert_eq!(ppu.read_data(), 0x66);
+        assert_eq!(ppu.read_data(), 0x77);
+        assert_eq!(ppu.read_data(), 0x88);
+    }
+
+    // Horizontal: https://wiki.nesdev.com/w/index.php/Mirroring
+    //   [0x2000 A ] [0x2400 a ]
+    //   [0x2800 B ] [0x2C00 b ]
+    #[test]
+    fn test_vram_horizontal_mirror() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ppu_addr(0x24);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.write_to_data(0x66); //write to a
+
+        ppu.write_to_ppu_addr(0x28);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.write_to_data(0x77); //write to B
+
+        ppu.write_to_ppu_addr(0x20);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load into buffer
+        assert_eq!(ppu.read_data(), 0x66); //read from A
+
+        ppu.write_to_ppu_addr(0x2C);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load into buffer
+        assert_eq!(ppu.read_data(), 0x77); //read from b
+    }
+
+    // Vertical: https://wiki.nesdev.com/w/index.php/Mirroring
+    //   [0x2000 A ] [0x2400 B ]
+    //   [0x2800 a ] [0x2C00 b ]
+    #[test]
+    fn test_vram_vertical_mirror() {
+        let mut ppu = NesPPU::new(vec![0; 2048], Mirroring::VERTICAL);
+
+        ppu.write_to_ppu_addr(0x20);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.write_to_data(0x66); //write to A
+
+        ppu.write_to_ppu_addr(0x2C);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.write_to_data(0x77); //write to b
+
+        ppu.write_to_ppu_addr(0x28);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load into buffer
+        assert_eq!(ppu.read_data(), 0x66); //read from a
+
+        ppu.write_to_ppu_addr(0x24);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load into buffer
+        assert_eq!(ppu.read_data(), 0x77); //read from B
+    }
+
+    #[test]
+    fn test_read_status_resets_latch() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.vram[0x0305] = 0x66;
+
+        ppu.write_to_ppu_addr(0x21);
+        ppu.write_to_ppu_addr(0x23);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load_into_buffer
+        assert_ne!(ppu.read_data(), 0x66);
+
+        ppu.read_status();
+
+        ppu.write_to_ppu_addr(0x23);
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load_into_buffer
+        assert_eq!(ppu.read_data(), 0x66);
+    }
+
+    #[test]
+    fn test_ppu_vram_mirroring() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.write_to_ctrl(0);
+        ppu.vram[0x0305] = 0x66;
+
+        ppu.write_to_ppu_addr(0x63); //0x6305 -> 0x2305
+        ppu.write_to_ppu_addr(0x05);
+
+        ppu.read_data(); //load into_buffer
+        assert_eq!(ppu.read_data(), 0x66);
+        // assert_eq!(ppu.addr.read(), 0x0306)
+    }
+
+    #[test]
+    fn test_read_status_resets_vblank() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.status.set_vblank_started(true);
+
+        let status = ppu.read_status();
+
+        assert_eq!(status >> 7, 1);
+        assert_eq!(ppu.status.current_val() >> 7, 0);
+    }
+
+    #[test]
+    fn test_oam_read_write() {
+        let mut ppu = NesPPU::new_empty_rom();
+        ppu.oam_addr_write(0x10);
+        ppu.oam_data_write(0x66);
+        ppu.oam_data_write(0x77);
+
+        ppu.oam_addr_write(0x10);
+        assert_eq!(ppu.oam_data_read(), 0x66);
+
+        ppu.oam_addr_write(0x11);
+        assert_eq!(ppu.oam_data_read(), 0x77);
+    }
+
+    #[test]
+    fn test_oam_dma() {
+        let mut ppu = NesPPU::new_empty_rom();
+
+        let mut data = [0x66; 256];
+        data[0] = 0x77;
+        data[255] = 0x88;
+
+        ppu.oam_addr_write(0x10);
+        ppu.oam_dma_write(&data);
+
+        ppu.oam_addr_write(0xf); //wrap around
+        assert_eq!(ppu.oam_data_read(), 0x88);
+
+        ppu.oam_addr_write(0x10);
+        assert_eq!(ppu.oam_data_read(), 0x77);
+  
+        ppu.oam_addr_write(0x11);
+        assert_eq!(ppu.oam_data_read(), 0x66);
     }
 }

@@ -21,7 +21,8 @@ fn test_rom_gen() -> Rom {
 pub struct Bus {
     cpu_vram: [u8; 2048],
     pub prg_rom: Vec<u8>,
-    ppu: NesPPU
+    ppu: NesPPU,
+    cycles: usize,
 }
 
 impl Bus {
@@ -29,8 +30,14 @@ impl Bus {
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: rom.prg_rom.clone(),
-            ppu: NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring)
+            ppu: NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring),
+            cycles: 0,
         }
+    }
+
+    pub fn tick(&mut self, cycles: usize) {
+        self.cycles += cycles;
+        // Call ppu tick function
     }
 
     // Call instead of new if you don't need to use a ROM
@@ -40,7 +47,8 @@ impl Bus {
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: temp_rom.prg_rom.clone(),
-            ppu: NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring)
+            ppu: NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring),
+            cycles: 0,
         }
     }
 
@@ -83,8 +91,10 @@ impl Mem for Bus {
                 self.cpu_vram[mirrored_addr as usize]
             }
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
-                panic!("Attempt to read from write-only PPU address {:x}", addr);
+                panic!("Attempt to read from write-only PPU address 0x{:04X}", addr);
             }
+            0x2002 => self.ppu.read_status(),
+            0x2004 => self.ppu.oam_data_read(),
             0x2007 => self.ppu.read_data(),
             0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
                 // Recall function with address properly mirrored
@@ -113,15 +123,16 @@ impl Mem for Bus {
                 let mirrored_addr = addr & 0b00000111_11111111;
                 self.cpu_vram[mirrored_addr as usize] = data;
             }
-            0x2000 => {
-                self.ppu.write_to_ctrl(data);
+            0x2000 => self.ppu.write_to_ctrl(data),
+            0x2001 => self.ppu.write_mask(data),
+            0x2002 => {
+                panic!("Attempt to write to read only PPU address 0x{:04X}", addr);
             }
-            0x2006 => {
-                self.ppu.write_to_ppu_addr(data);
-            }
-            0x2007 => {
-                self.ppu.write_to_data(data);
-            }
+            0x2003 => self.ppu.oam_addr_write(data),
+            0x2004 => self.ppu.oam_data_write(data),
+            0x2005 => self.ppu.write_scroll(data),
+            0x2006 => self.ppu.write_to_ppu_addr(data),
+            0x2007 => self.ppu.write_to_data(data),
             0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
                 let mirrored_addr = addr &0b0010000_00000111;
                 todo!("PPU IS NOT YET SUPPORTED")
@@ -146,5 +157,18 @@ impl Mem for Bus {
 
         self.mem_write(addr, lo);
         self.mem_write(addr + 1, hi);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::rom::{Rom, test};
+
+    #[test]
+    fn test_mem_read_write_to_ram() {
+        let mut bus = Bus::new(test::test_rom());
+        bus.mem_write(0x01, 0x55);
+        assert_eq!(bus.mem_read(0x01), 0x55);
     }
 }
