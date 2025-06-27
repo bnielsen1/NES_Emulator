@@ -1,12 +1,14 @@
 mod cpu;
 mod rom;
 mod bus;
+mod ppu;
 
 use std::path::Path;
 use std::error::Error;
 
 use crate::cpu::CPU;
 use crate::rom::Rom;
+use crate::ppu::NesPPU;
 
 use rand::Rng;
 use sdl2::event::Event;
@@ -37,10 +39,7 @@ fn print_hex(vec: &Vec<u8>) {
     println!();
 }
 
-use std::fs::File;
-use std::io::{self, Write};
-
-fn read_screen_state(cpu: &CPU, frame: &mut [u8; 32 * 3 * 32]) -> bool {
+fn read_screen_state(cpu: &mut CPU, frame: &mut [u8; 32 * 3 * 32]) -> bool {
     let mut frame_idx = 0;
     let mut update = false;
     for i in 0x0200..0x600 {
