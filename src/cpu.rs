@@ -548,6 +548,14 @@ impl CPU {
         self.run_with_callback(|_: &mut CPU| {});
     }
 
+    fn conditional_cycle_check(&mut self, addr: u16, offset: u8) {
+        if self.is_page_cross(addr, offset) {
+            self.extra_cycles += 2
+        } else {
+            self.extra_cycles += 1;
+        }
+    }
+
     fn is_page_cross(&self, addr: u16, offset: u8) -> bool {
         (addr & 0xFF00) != ((addr + offset as u16) & 0xFF00)
     }
@@ -782,6 +790,7 @@ impl CPU {
         // If carry flag is clear, branch pc
         if (self.status ^ 0b0000_0001) & 0b0000_0001 == 0b0000_0001 { 
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -790,6 +799,7 @@ impl CPU {
         // If carry flag is set, branch pc
         if (self.status & 0b0000_0001) == 0b0000_0001 {
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -797,6 +807,7 @@ impl CPU {
     fn beq(&mut self) {
         if (self.status & 0b0000_00010) == 0b0000_0010 {
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -832,6 +843,7 @@ impl CPU {
     fn bmi(&mut self) {
         if (self.status & 0b1000_0000) == 0b1000_0000 {
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -839,6 +851,7 @@ impl CPU {
     fn bne(&mut self) {
         if (self.status ^ 0b0000_0010) & 0b0000_0010 == 0b0000_0010 { 
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -846,6 +859,7 @@ impl CPU {
     fn bpl(&mut self) {
         if (self.status ^ 0b1000_0000) & 0b1000_0000 == 0b1000_0000 { 
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -853,6 +867,7 @@ impl CPU {
     fn bvc(&mut self) {
         if (self.status ^ 0b0100_0000) & 0b0100_0000 == 0b0100_0000 { 
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
@@ -861,6 +876,7 @@ impl CPU {
         // If carry flag is set, branch pc
         if (self.status & 0b0100_0000) == 0b0100_0000 {
             let offset: i8 = self.mem_read(self.pc) as i8;
+            self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         }
     }
