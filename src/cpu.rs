@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 
 use crate::rom::Rom;
@@ -14,6 +14,7 @@ pub struct CPU {
     pub pc: u16, // stores mem address of next byte of code (16 bits cause ram size)
     pub sp: u8,
     pub bus: Bus,
+    pub extra_cycles: usize
 }
 
 // status register bit values
@@ -43,6 +44,53 @@ impl OpCode {
         OpCode { addr, code, bytes, cycles, addressing_mode }
     }
 }
+
+pub static PAGE_CROSSERS: Lazy<HashSet<u8>> = Lazy::new(|| {
+    let mut set = HashSet::new();
+
+    // ADC
+    set.insert(0x7D);
+    set.insert(0x79);
+    set.insert(0x71);
+
+    // AND
+    set.insert(0x3D);
+    set.insert(0x39);
+    set.insert(0x31);
+
+    // CMP
+    set.insert(0xDD);
+    set.insert(0xD9);
+    set.insert(0xD1);
+
+    // EOR
+    set.insert(0x5D);
+    set.insert(0x59);
+    set.insert(0x51);
+
+    // LDA
+    set.insert(0xBD);
+    set.insert(0xB9);
+    set.insert(0xB1);
+
+    // LDX
+    set.insert(0xBE);
+
+    // LDY
+    set.insert(0xBC);
+
+    // ORA
+    set.insert(0x1D);
+    set.insert(0x19);
+    set.insert(0x11);
+
+    // SBC
+    set.insert(0xFD);
+    set.insert(0xF9);
+    set.insert(0xF1);
+
+    set
+});
 
 pub static OPCODE_TABLE: Lazy<HashMap<u8, OpCode>> = Lazy::new(|| {
     let mut map = HashMap::new();
@@ -340,6 +388,7 @@ impl CPU {
             sp: 0xFF,
             reg_x: 0,
             reg_y: 0,
+            extra_cycles: 0,
             bus: Bus::new(rom),
         }
     }
@@ -352,12 +401,14 @@ impl CPU {
             sp: 0xFF,
             reg_x: 0,
             reg_y: 0,
+            extra_cycles: 0,
             bus: Bus::new_fake_rom()
         }
     }
 
     // Getting operand information
     fn get_opperand_address(&mut self, mode: &AddressingMode) -> u16 {
+        // Do standard mode matching
         match mode {
             AddressingMode::Immediate => self.pc, // raw value at the address already
             AddressingMode::ZeroPage => self.mem_read(self.pc) as u16, // pc stores 1 byte addr
@@ -497,6 +548,42 @@ impl CPU {
         self.run_with_callback(|_: &mut CPU| {});
     }
 
+    fn is_page_cross(&self, addr: u16, offset: u8) -> bool {
+        (addr & 0xFF00) != ((addr + offset as u16) & 0xFF00)
+    }
+
+    fn calc_page_cycles(&mut self, mode: &AddressingMode) -> usize {
+
+        match mode {
+            AddressingMode::Absolute_X => {
+                let addr = self.mem_read_u16(self.pc);
+                if self.is_page_cross(addr, self.reg_x) {
+                    return 1;
+                }
+            },
+            AddressingMode::Absolute_Y => {
+                let addr = self.mem_read_u16(self.pc);
+                if self.is_page_cross(addr, self.reg_y) {
+                    return 1;
+                }
+            },
+            AddressingMode::Indirect_Y => {
+                let addr = self.mem_read(self.pc);
+
+                let low = self.mem_read(addr as u16);
+                let high = self.mem_read((addr as u8).wrapping_add(1) as u16);
+                let ptr = (high as u16) << 8 | (low as u16);
+                if self.is_page_cross(ptr, self.reg_y) {
+                    return 1;
+                }
+            },
+            _ => panic!("Passed an invalid addressing mode for a cycle calculation!")
+        }
+
+        // Return no extra cycles if we never found a reason to add some
+        return 0;
+    }
+
     pub fn run_with_callback<F>(&mut self, mut callback: F) 
         where
             F: FnMut(&mut CPU),
@@ -511,6 +598,11 @@ impl CPU {
 
                 // Move the program counter to point to the next address after opscode
                 self.pc += 1;
+
+                // Calculate extra cycles due to page crossing
+                if PAGE_CROSSERS.contains(&opscode) {
+                    self.extra_cycles += self.calc_page_cycles(&op_object.addressing_mode);
+                }
 
                 // Match to the corresponding opscode and run that function
                 println!("Running instruction {}", op_object.code);
@@ -585,6 +677,14 @@ impl CPU {
                     "TXS" => self.txs(),
                     "TYA" => self.tya(),
                     _ => panic!("Returned op_code: \"{}\" is not yet implemented...", op_object.code)
+                }
+
+                // Handle number of ticks to move
+                self.bus.tick(op_object.cycles + self.extra_cycles);
+
+                // Reset extra cycles from last instruction
+                if self.extra_cycles > 0 {
+                    self.extra_cycles = 0;
                 }
 
                 // Increment the program counter depending on the addressing mode
@@ -1220,6 +1320,28 @@ impl CPU {
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #[cfg(test)]

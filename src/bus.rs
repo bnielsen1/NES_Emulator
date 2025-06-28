@@ -37,7 +37,7 @@ impl Bus {
 
     pub fn tick(&mut self, cycles: usize) {
         self.cycles += cycles;
-        // Call ppu tick function
+        self.ppu.tick(cycles * 3); // ppu ticks 3 times faster than CPU
     }
 
     // Call instead of new if you don't need to use a ROM
