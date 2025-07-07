@@ -592,12 +592,43 @@ impl CPU {
         return 0;
     }
 
+    fn interrupt_nmi(&mut self) {
+        self.stack_push_u16(self.pc);
+        let mut flag = self.status.clone();
+        flag = flag & 0b1110_1111; // zero break bit for nmi interrupts
+        flag = flag | 0b0010_0000; // always set unused break2 bit to 1 (idk why lol)
+
+        self.stack_push(flag);
+        self.status = self.status | 0b0000_0100; // Disable IRQ interrupts until cpu finishes
+
+        self.bus.tick(2); // Standard tick time of processing an NMI interrupt
+        self.pc = self.mem_read_u16(0xFFFA); // Set the pc to run whatever instruction our ROM runs on NMI interrupts
+    }
+
+    fn interrupt_irq(&mut self) {
+        self.stack_push_u16(self.pc + 1); // +1 since BRK lies abouts its opcode size by 1
+        let mut flag = self.status.clone();
+        flag = flag| 0b0001_0000; // set break bit for irq interrupts
+        flag = flag | 0b0010_0000; // always set unused break2 bit to 1 (idk why lol)
+
+        self.stack_push(flag);
+        self.status = self.status | 0b0000_0100; // Disable IRQ interrupts until cpu finishes
+
+        self.bus.tick(2); // Standard tick time of processing an NMI interrupt
+        self.pc = self.mem_read_u16(0xFFFE); // Set the pc to run whatever instruction our ROM runs on NMI interrupts
+    }
+
     pub fn run_with_callback<F>(&mut self, mut callback: F) 
         where
             F: FnMut(&mut CPU),
         {
             loop {
                 callback(self);
+
+                if self.bus.poll_nmi_status() { // Check if there's an NMI interrupt and execute one
+                    println!("Interrupt triggered!!!");
+                    self.interrupt_nmi();
+                }
 
                 // Read the current opcode in binary and convert using our table
                 let opscode = self.mem_read(self.pc);
@@ -621,7 +652,7 @@ impl CPU {
 
                 match op_object.code {
                     "LDA" => self.lda(&op_object.addressing_mode),
-                    "BRK" => break,
+                    "BRK" => self.brk(),
                     "TAX" => self.tax(),
                     "INX" => self.inx(),
                     "CLC" => self.clc(),
@@ -705,6 +736,10 @@ impl CPU {
     }
 
     // Begin instruction set implementations
+
+    fn brk(&mut self) {
+        self.interrupt_irq();
+    }
 
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_opperand_address(mode);

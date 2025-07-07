@@ -70,6 +70,10 @@ impl Bus {
         }
         self.prg_rom[addr as usize] = data;
     }
+
+    pub fn poll_nmi_status(&self) -> bool {
+        self.ppu.get_nmi_status()
+    }
 }
 
 

@@ -22,12 +22,13 @@ pub struct NesPPU {
     pub mirroring: Mirroring,
     cycles: usize,
     scanline: u16,
+    trigger_nmi: bool, // Variable cpu reads to see if it should be interrupted
 
     addr: AddrRegister,
     status: StatusRegister,
     scroll: ScrollRegister,
     mask: MaskRegister,
-    pub ctrl: ControlRegister,
+    ctrl: ControlRegister,
 }
 
 impl NesPPU {
@@ -44,6 +45,7 @@ impl NesPPU {
             palette_table: [0; 32],
             cycles: 0,
             scanline: 0,
+            trigger_nmi: false,
             addr: AddrRegister::new(),
             status: StatusRegister::new(),
             scroll: ScrollRegister::new(),
@@ -64,6 +66,7 @@ impl NesPPU {
             palette_table: [0; 32],
             cycles: 0,
             scanline: 0,
+            trigger_nmi: false,
             addr: AddrRegister::new(),
             status: StatusRegister::new(),
             scroll: ScrollRegister::new(),
@@ -79,14 +82,15 @@ impl NesPPU {
 
             self.scanline += 1;
             if self.scanline == 241 { // Trigger interupt at 241st scanline (offscreen)
-                if self.ctrl.is_generate_nmi() { // If we should be triggering vblank interrupts
-                    self.status.set_vblank_started(true);
-                    todo!("Trigger an NMI interrupt here on the CPU")
+                self.status.set_vblank_started(true);
+                if self.ctrl.is_generate_nmi() {
+                    self.trigger_nmi = true;
                 }
             }
 
             if self.scanline >= 262 {
                 // Reset out scanlines
+                self.trigger_nmi = false;
                 self.scanline = 0;
                 self.status.set_vblank_started(false);
                 return true;
@@ -103,7 +107,15 @@ impl NesPPU {
 
     // Handles 0x2000 writes
     pub fn write_to_ctrl(&mut self, value: u8) {
+        let prev_ctrl_status = self.ctrl.is_generate_nmi();
         self.ctrl.update(value);
+        if !prev_ctrl_status && self.ctrl.is_generate_nmi() && self.status.is_vblank_started() {
+            self.trigger_nmi = true;
+        }
+    }
+
+    pub fn get_nmi_status(&self) -> bool {
+        self.trigger_nmi
     }
 
     // Called upon 0x2007 writes or reads
@@ -273,23 +285,6 @@ impl AddrRegister {
 }
 
 bitflags! {
-
-   // 7  bit  0
-   // ---- ----
-   // VPHB SINN
-   // |||| ||||
-   // |||| ||++- Base nametable address
-   // |||| ||    (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
-   // |||| |+--- VRAM address increment per CPU read/write of PPUDATA
-   // |||| |     (0: add 1, going across; 1: add 32, going down)
-   // |||| +---- Sprite pattern table address for 8x8 sprites
-   // ||||       (0: $0000; 1: $1000; ignored in 8x16 mode)
-   // |||+------ Background pattern table address (0: $0000; 1: $1000)
-   // ||+------- Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
-   // |+-------- PPU master/slave select
-   // |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
-   // +--------- Generate an NMI at the start of the
-   //            vertical blanking interval (0: off; 1: on)
    pub struct StatusRegister: u8 {
        const UNUSED1                 = 0b0000_0001;
        const UNUSED2                 = 0b0000_0010;
