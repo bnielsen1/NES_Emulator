@@ -83,6 +83,7 @@ impl NesPPU {
             self.scanline += 1;
             if self.scanline == 241 { // Trigger interupt at 241st scanline (offscreen)
                 self.status.set_vblank_started(true);
+                self.status.set_sprite_zero_hit(false);
                 if self.ctrl.is_generate_nmi() {
                     self.trigger_nmi = true;
                 }
@@ -93,6 +94,8 @@ impl NesPPU {
                 self.trigger_nmi = false;
                 self.scanline = 0;
                 self.status.set_vblank_started(false);
+                self.status.set_sprite_overflow(false);
+                self.status.set_sprite_zero_hit(false);
                 return true;
             }
         }
