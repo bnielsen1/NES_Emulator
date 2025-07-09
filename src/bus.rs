@@ -1,5 +1,6 @@
 
-use crate::{ppu::NesPPU, rom::{Mirroring, Rom}};
+use crate::{joypad, ppu::NesPPU, rom::{Mirroring, Rom}};
+use crate::joypad::Joypad;
 
 const RAM: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
@@ -20,21 +21,23 @@ fn test_rom_gen() -> Rom {
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
+    joypad1: Joypad,
     pub prg_rom: Vec<u8>,
     ppu: NesPPU,
     cycles: usize,
-    gameloop_callback: Box<dyn FnMut(&NesPPU) + 'call>,
+    gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
 
 impl<'a> Bus<'a> {
     pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
     where
-        F: FnMut(&NesPPU) + 'call,
+        F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
         let ppu = NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring);
 
         Bus {
             cpu_vram: [0; 2048],
+            joypad1: Joypad::new(),
             prg_rom: rom.prg_rom.clone(),
             ppu: ppu,
             cycles: 0,
@@ -54,7 +57,7 @@ impl<'a> Bus<'a> {
 
         // Call the gameloop function which will handle rendering other possible inputs
         if !nmi_before && nmi_after {
-            (self.gameloop_callback)(&self.ppu);
+            (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
     }
 
@@ -72,13 +75,14 @@ impl<'a> Bus<'a> {
 
     pub fn new_fake_rom<'call, F>(gameloop_callback: F) -> Bus<'call>
     where
-        F: FnMut(&NesPPU) + 'call,
+        F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
         let temp_rom = test_rom_gen();
         let ppu = NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring);
 
         Bus {
             cpu_vram: [0; 2048],
+            joypad1: Joypad::new(),
             prg_rom: temp_rom.prg_rom.clone(),
             ppu: ppu,
             cycles: 0,
@@ -141,13 +145,16 @@ impl Mem for Bus<'_> {
             0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
                 // Recall function with address properly mirrored
                 let mirrored_addr = addr &0b0010000_00000111;
-                todo!("PPU IS NOT YET SUPPORTED")
+                self.mem_read(mirrored_addr)
             }
             ROM_MEM_START ..= ROM_MEM_END => {
                 self.read_prg_rom(addr)
             }
-            0x4016 | 0x4017 => {
-                // don't do anything these are apu calls
+            0x4016 => {
+                self.joypad1.read()
+            }
+            0x4017 => {
+                // this is controller 2 which is not implemented yet
                 0
             }
             _ => {
@@ -181,10 +188,13 @@ impl Mem for Bus<'_> {
             0x2007 => self.ppu.write_to_data(data),
             0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
                 let mirrored_addr = addr &0b0010000_00000111;
-                todo!("PPU IS NOT YET SUPPORTED")
+                self.mem_write(mirrored_addr, data);
             }
             ROM_MEM_START ..= ROM_MEM_END => {
                 panic!("Attempted to write to Cartridge ROM space!!!")
+            }
+            0x4000 | 0x4001 | 0x4002 | 0x4003 | 0x4006 | 0x4005 | 0x4007 | 0x4004 => {
+                // APU IGNORE
             }
             0x4014 => {
                 let mut cpu_addr = (data as u16) << 8;
@@ -197,8 +207,11 @@ impl Mem for Bus<'_> {
 
                 // to do: handle added cycles due to this action as seen on nesdev wiki for 0x4014
             }
-            0x4016 | 0x4017 => {
-                // don't do anything these are apu calls
+            0x4016 => {
+                self.joypad1.write(data);
+            }
+            0x4017 => {
+                // this is controller 2 which is not implemented yet
             }
             _ => {
                 println!("Attempted to write memory at unknown address 0x{:04X}", addr);
@@ -228,7 +241,7 @@ mod test {
 
     #[test]
     fn test_mem_read_write_to_ram() {
-        let mut bus = Bus::new(test::test_rom(), |ppu| {});
+        let mut bus = Bus::new(test::test_rom(), |ppu, joypad1| {});
         bus.mem_write(0x01, 0x55);
         assert_eq!(bus.mem_read(0x01), 0x55);
     }

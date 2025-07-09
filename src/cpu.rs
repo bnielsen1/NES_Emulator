@@ -1390,7 +1390,7 @@ mod test {
 
         #[test]
         fn test_lda_from_memory() {
-            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0x55);
 
@@ -1401,7 +1401,7 @@ mod test {
 
         #[test]
         fn test_tax_basics() {
-            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0x13);
             
@@ -1412,7 +1412,7 @@ mod test {
 
         #[test]
         fn test_inx_basics() {
-            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0xFF);
 
@@ -1427,7 +1427,7 @@ mod test {
 // SEC TESTING
 #[test]
 fn test_sec_sets_carry_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Run program: SEC (set carry), BRK
@@ -1440,7 +1440,7 @@ fn test_sec_sets_carry_flag() {
 // BRK TESTING
 #[test]
 fn test_clc_clears_carry_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Run program: SEC (set carry), CLC (clear carry), BRK
@@ -1457,7 +1457,7 @@ mod adc_tests {
 
     #[test]
     fn test_adc_simple_add() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x20);
 
@@ -1482,7 +1482,7 @@ mod adc_tests {
 
     #[test]
     fn test_adc_with_carry_in() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x20, 0x20);
 
@@ -1504,7 +1504,7 @@ mod adc_tests {
 
     #[test]
     fn test_adc_carry_out() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x30, 0x20);
 
@@ -1527,7 +1527,7 @@ mod adc_tests {
 
     #[test]
     fn test_adc_overflow_flag_set() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x40, 0x01);
 
@@ -1550,7 +1550,7 @@ mod adc_tests {
 
     #[test]
     fn test_adc_result_zero() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x50, 0x01);
 
@@ -1576,7 +1576,7 @@ mod adc_tests {
 
 #[test]
 fn test_and_sets_bits_correctly() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // LDA #$F0
     // AND #$0F
@@ -1589,7 +1589,7 @@ fn test_and_sets_bits_correctly() {
 
 #[test]
 fn test_and_sets_negative_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // LDA #$F0
     // AND #$F0
@@ -1602,7 +1602,7 @@ fn test_and_sets_negative_flag() {
 
 #[test]
 fn test_and_zero_flag_not_set() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // LDA #$AA
     // AND #$0F
@@ -1616,7 +1616,7 @@ fn test_and_zero_flag_not_set() {
 
 #[test]
 fn test_asl_accumulator_sets_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x80, // LDA #$80 (1000_0000)
@@ -1632,7 +1632,7 @@ fn test_asl_accumulator_sets_carry() {
 
 #[test]
 fn test_asl_accumulator_sets_negative() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x40, // LDA #$40 (0100_0000)
@@ -1648,7 +1648,7 @@ fn test_asl_accumulator_sets_negative() {
 
 #[test]
 fn test_asl_accumulator_clear_flags() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x01, // LDA #$01
@@ -1664,7 +1664,7 @@ fn test_asl_accumulator_clear_flags() {
 
 #[test]
 fn test_bcc_branch_taken() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
@@ -1681,7 +1681,7 @@ fn test_bcc_branch_taken() {
 
 #[test]
 fn test_bcc_branch_not_taken() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Set carry flag first with SEC
@@ -1698,7 +1698,7 @@ fn test_bcc_branch_not_taken() {
 
 #[test]
 fn test_bcc_branch_negative_offset() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
@@ -1719,7 +1719,7 @@ fn test_bcc_branch_negative_offset() {
 
 #[test]
 fn test_bcs_branch_taken() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
@@ -1736,7 +1736,7 @@ fn test_bcs_branch_taken() {
 
 #[test]
 fn test_bcs_branch_not_taken() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Set carry flag first with SEC
@@ -1753,7 +1753,7 @@ fn test_bcs_branch_not_taken() {
 
 #[test]
 fn test_bcs_branch_negative_offset() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
@@ -1774,7 +1774,7 @@ fn test_bcs_branch_negative_offset() {
 
 #[test]
 fn test_beq_branch_taken_forward() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Set zero flag using LDA #$00 (will set Zero flag)
@@ -1791,7 +1791,7 @@ fn test_beq_branch_taken_forward() {
 
 #[test]
 fn test_beq_branch_not_taken() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Clear zero flag using LDA #$01
@@ -1810,7 +1810,7 @@ fn test_beq_branch_not_taken() {
 
 #[test]
 fn test_bit_sets_zero_flag_when_result_zero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // LDA #$00
     // BIT $10 (memory at $10 is $FF => A & M = 0)
@@ -1823,7 +1823,7 @@ fn test_bit_sets_zero_flag_when_result_zero() {
 
 #[test]
 fn test_bit_clears_zero_flag_when_result_nonzero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // LDA #$FF
     // BIT $10 (memory at $10 is $0F => A & M = $0F != 0)
@@ -1836,7 +1836,7 @@ fn test_bit_clears_zero_flag_when_result_nonzero() {
 
 #[test]
 fn test_bit_sets_negative_flag_when_bit_7_of_memory_set() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b1000_0000)
@@ -1848,7 +1848,7 @@ fn test_bit_sets_negative_flag_when_bit_7_of_memory_set() {
 
 #[test]
 fn test_bit_clears_negative_flag_when_bit_7_of_memory_clear() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b0111_1111)
@@ -1860,7 +1860,7 @@ fn test_bit_clears_negative_flag_when_bit_7_of_memory_clear() {
 
 #[test]
 fn test_bit_sets_overflow_flag_when_bit_6_of_memory_set() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b0100_0000)
@@ -1872,7 +1872,7 @@ fn test_bit_sets_overflow_flag_when_bit_6_of_memory_set() {
 
 #[test]
 fn test_bit_clears_overflow_flag_when_bit_6_of_memory_clear() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b1011_1111)
@@ -1885,7 +1885,7 @@ fn test_bit_clears_overflow_flag_when_bit_6_of_memory_clear() {
 //CMP
 #[test]
 fn test_cmp_equal() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDA #$20
@@ -1904,7 +1904,7 @@ fn test_cmp_equal() {
 
 #[test]
 fn test_cmp_less_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDA #$10
@@ -1923,7 +1923,7 @@ fn test_cmp_less_than() {
 
 #[test]
 fn test_cmp_greater_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDA #$30
@@ -1942,7 +1942,7 @@ fn test_cmp_greater_than() {
 
 #[test]
 fn test_cmp_memory_operand() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x42);
 
@@ -1962,7 +1962,7 @@ fn test_cmp_memory_operand() {
 
 #[test]
 fn test_cpy_equal() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDY #$40
@@ -1981,7 +1981,7 @@ fn test_cpy_equal() {
 
 #[test]
 fn test_cpy_less_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDY #$10
@@ -2000,7 +2000,7 @@ fn test_cpy_less_than() {
 
 #[test]
 fn test_cpy_greater_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDY #$50
@@ -2019,7 +2019,7 @@ fn test_cpy_greater_than() {
 
 #[test]
 fn test_cpx_equal() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDX #$20
@@ -2038,7 +2038,7 @@ fn test_cpx_equal() {
 
 #[test]
 fn test_cpx_less_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDX #$10
@@ -2057,7 +2057,7 @@ fn test_cpx_less_than() {
 
 #[test]
 fn test_cpx_greater_than() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDX #$30
@@ -2076,7 +2076,7 @@ fn test_cpx_greater_than() {
 
 #[test]
 fn test_dec_simple() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x42);
 
@@ -2095,7 +2095,7 @@ fn test_dec_simple() {
 
 #[test]
 fn test_dec_to_zero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0x01);
 
@@ -2111,7 +2111,7 @@ fn test_dec_to_zero() {
 
 #[test]
 fn test_dec_negative_result() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0x80);
 
@@ -2127,7 +2127,7 @@ fn test_dec_negative_result() {
 
 #[test]
 fn test_dec_wraparound() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x40, 0x00);
 
@@ -2143,7 +2143,7 @@ fn test_dec_wraparound() {
 
 #[test]
 fn test_dex_simple() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // LDX #$42
@@ -2162,7 +2162,7 @@ fn test_dex_simple() {
 
 #[test]
 fn test_dex_to_zero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2178,7 +2178,7 @@ fn test_dex_to_zero() {
 
 #[test]
 fn test_dex_wraparound() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2194,7 +2194,7 @@ fn test_dex_wraparound() {
 
 #[test]
 fn test_dey_simple() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2210,7 +2210,7 @@ fn test_dey_simple() {
 
 #[test]
 fn test_dey_to_zero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2226,7 +2226,7 @@ fn test_dey_to_zero() {
 
 #[test]
 fn test_dey_wraparound() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2242,7 +2242,7 @@ fn test_dey_wraparound() {
 
 #[test]
 fn test_eor_non_zero_non_negative() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_1100); // 0x0C
 
@@ -2259,7 +2259,7 @@ fn test_eor_non_zero_non_negative() {
 
 #[test]
 fn test_eor_zero_result() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0b0101_0101); // 0x55
 
@@ -2276,7 +2276,7 @@ fn test_eor_zero_result() {
 
 #[test]
 fn test_eor_result_negative() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0b1111_0000); // 0xF0
 
@@ -2293,7 +2293,7 @@ fn test_eor_result_negative() {
 
 #[test]
 fn test_inc_normal_increment() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x1A); // Initial value
 
@@ -2309,7 +2309,7 @@ fn test_inc_normal_increment() {
 
 #[test]
 fn test_inc_sets_zero_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0xFF); // 0xFF + 1 wraps to 0x00
 
@@ -2325,7 +2325,7 @@ fn test_inc_sets_zero_flag() {
 
 #[test]
 fn test_inc_sets_negative_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0x7F); // 0x7F + 1 = 0x80 (negative)
 
@@ -2341,7 +2341,7 @@ fn test_inc_sets_negative_flag() {
 
 #[test]
 fn test_iny_normal_increment() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2357,7 +2357,7 @@ fn test_iny_normal_increment() {
 
 #[test]
 fn test_iny_sets_zero_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2373,7 +2373,7 @@ fn test_iny_sets_zero_flag() {
 
 #[test]
 fn test_iny_sets_negative_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2389,7 +2389,7 @@ fn test_iny_sets_negative_flag() {
 
 #[test]
 fn test_jmp_absolute() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2407,7 +2407,7 @@ fn test_jmp_absolute() {
 
 #[test]
 fn test_jmp_indirect() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.mem_write_u16(0x0010, 0x8005);
@@ -2427,7 +2427,7 @@ fn test_jmp_indirect() {
 
 #[test]
 fn test_broken_jmp() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     // Memory stuff for the jump
@@ -2447,7 +2447,7 @@ fn test_broken_jmp() {
 
 #[test]
 fn test_jsr_forward_jump() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2465,7 +2465,7 @@ fn test_jsr_forward_jump() {
 
 #[test]
 fn test_jsr_backward_jump() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2484,7 +2484,7 @@ fn test_jsr_backward_jump() {
 
 #[test]
 fn test_rts_sets_carry_and_returns() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2507,7 +2507,7 @@ fn test_rts_sets_carry_and_returns() {
 
 #[test]
 fn test_lsr_accumulator_no_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_1010, // LDA #$0A (10)
@@ -2523,7 +2523,7 @@ fn test_lsr_accumulator_no_carry() {
 
 #[test]
 fn test_lsr_accumulator_carry_set() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0101, // LDA #$05
@@ -2539,7 +2539,7 @@ fn test_lsr_accumulator_carry_set() {
 
 #[test]
 fn test_lsr_accumulator_result_zero() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0001, // LDA #$01
@@ -2555,7 +2555,7 @@ fn test_lsr_accumulator_result_zero() {
 
 #[test]
 fn test_lsr_zero_page() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b1000_0000); // value at $0010
 
@@ -2572,7 +2572,7 @@ fn test_lsr_zero_page() {
 
 #[test]
 fn test_lsr_absolute_sets_zero_and_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x1234, 0x01); // value at $1234
 
@@ -2589,7 +2589,7 @@ fn test_lsr_absolute_sets_zero_and_carry() {
 
 #[test]
 fn test_nop_function() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2605,7 +2605,7 @@ fn test_nop_function() {
 
 #[test]
 fn test_ora_non_zero_non_negative() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_1100); // 0x0C
 
@@ -2622,7 +2622,7 @@ fn test_ora_non_zero_non_negative() {
 
 #[test]
 fn test_ora_zero_result() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0b0000_0000); // 0x00
 
@@ -2639,7 +2639,7 @@ fn test_ora_zero_result() {
 
 #[test]
 fn test_ora_result_negative() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0b1111_0000); // 0xF0
 
@@ -2656,7 +2656,7 @@ fn test_ora_result_negative() {
 
 #[test]
 fn test_pha_pushes_accumulator() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2671,7 +2671,7 @@ fn test_pha_pushes_accumulator() {
 
 #[test]
 fn test_php_pushes_status_register() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2690,7 +2690,7 @@ fn test_php_pushes_status_register() {
 
 #[test]
 fn test_pla_sets_accumulator_correctly() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2708,7 +2708,7 @@ fn test_pla_sets_accumulator_correctly() {
 
 #[test]
 fn test_pla_sets_zero_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2726,7 +2726,7 @@ fn test_pla_sets_zero_flag() {
 
 #[test]
 fn test_pla_sets_negative_flag() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2744,7 +2744,7 @@ fn test_pla_sets_negative_flag() {
 
 #[test]
 fn test_plp_sets_status_register() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
@@ -2763,7 +2763,7 @@ fn test_plp_sets_status_register() {
 
 #[test]
 fn test_rol_accumulator_no_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0100_0000, // LDA #$40
@@ -2779,7 +2779,7 @@ fn test_rol_accumulator_no_carry() {
 
 #[test]
 fn test_rol_accumulator_sets_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b1000_0000, // LDA #$80
@@ -2795,7 +2795,7 @@ fn test_rol_accumulator_sets_carry() {
 
 #[test]
 fn test_rol_zero_page_with_carry_in() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_0001);
 
@@ -2814,7 +2814,7 @@ fn test_rol_zero_page_with_carry_in() {
 
 #[test]
 fn test_ror_accumulator_no_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0010, // LDA #$02
@@ -2830,7 +2830,7 @@ fn test_ror_accumulator_no_carry() {
 
 #[test]
 fn test_ror_accumulator_sets_carry() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0001, // LDA #$01
@@ -2846,7 +2846,7 @@ fn test_ror_accumulator_sets_carry() {
 
 #[test]
 fn test_ror_absolute_with_carry_in() {
-    let mut bus = Bus::new_fake_rom(|ppu| {});
+    let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
     cpu.mem_write(0x1234, 0b0000_0000);
 
@@ -2868,7 +2868,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_simple_sub() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x10);
 
@@ -2891,7 +2891,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_with_borrow() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x20, 0x40);
 
@@ -2913,7 +2913,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_with_carry_in() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x30, 0x01);
 
@@ -2935,7 +2935,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_result_zero() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x40, 0x10);
 
@@ -2957,7 +2957,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_negative_result() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x50, 0x20);
 
@@ -2979,7 +2979,7 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_overflow_flag_set() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.mem_write(0x60, 0xFF);
 
@@ -3006,7 +3006,7 @@ mod sta_tests {
 
     #[test]
     fn test_sta_zero_page() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA9, 0x42, // LDA #$42
@@ -3018,7 +3018,7 @@ mod sta_tests {
 
     #[test]
     fn test_sta_absolute() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA9, 0x99,       // LDA #$99
@@ -3030,7 +3030,7 @@ mod sta_tests {
 
     #[test]
     fn test_sta_zero_page_x() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x04, // LDX #$04
@@ -3048,7 +3048,7 @@ mod stx_tests {
 
     #[test]
     fn test_stx_zero_page() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x33, // LDX #$33
@@ -3060,7 +3060,7 @@ mod stx_tests {
 
     #[test]
     fn test_stx_absolute() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x77,       // LDX #$77
@@ -3072,7 +3072,7 @@ mod stx_tests {
 
     #[test]
     fn test_stx_zero_page_y() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x66, // LDX #$66
@@ -3090,7 +3090,7 @@ mod sty_tests {
 
     #[test]
     fn test_sty_zero_page() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0x55, // LDY #$55
@@ -3102,7 +3102,7 @@ mod sty_tests {
 
     #[test]
     fn test_sty_absolute() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0x11,       // LDY #$11
@@ -3114,7 +3114,7 @@ mod sty_tests {
 
     #[test]
     fn test_sty_zero_page_x() {
-        let mut bus = Bus::new_fake_rom(|ppu| {});
+        let mut bus = Bus::new_fake_rom(|ppu, joypad1| {});
             let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0xFE, // LDY #$FE
