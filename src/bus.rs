@@ -18,37 +18,71 @@ fn test_rom_gen() -> Rom {
     }
 }
 
-pub struct Bus {
+pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     pub prg_rom: Vec<u8>,
     ppu: NesPPU,
     cycles: usize,
+    gameloop_callback: Box<dyn FnMut(&NesPPU) + 'call>,
 }
 
-impl Bus {
-    pub fn new(rom: Rom) -> Self {
+impl<'a> Bus<'a> {
+    pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
+    where
+        F: FnMut(&NesPPU) + 'call,
+    {
+        let ppu = NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring);
+
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: rom.prg_rom.clone(),
-            ppu: NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring),
+            ppu: ppu,
             cycles: 0,
+            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
     pub fn tick(&mut self, cycles: usize) {
         self.cycles += cycles;
+
+
+        // Read NMI status before and after a ppu clock cycle to see
+        // if we just entered VBlank -> meaning a screen is ready to be rendered
+        let nmi_before = self.ppu.trigger_nmi;
         self.ppu.tick(cycles * 3); // ppu ticks 3 times faster than CPU
+        let nmi_after = self.ppu.trigger_nmi;
+
+        // Call the gameloop function which will handle rendering other possible inputs
+        if !nmi_before && nmi_after {
+            (self.gameloop_callback)(&self.ppu);
+        }
     }
 
     // Call instead of new if you don't need to use a ROM
-    pub fn new_fake_rom() -> Self {
+    // pub fn new_fake_rom() -> Self {
+    //     let temp_rom = test_rom_gen();
+
+    //     Bus {
+    //         cpu_vram: [0; 2048],
+    //         prg_rom: temp_rom.prg_rom.clone(),
+    //         ppu: NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring),
+    //         cycles: 0,
+    //     }
+    // }
+
+    pub fn new_fake_rom<'call, F>(gameloop_callback: F) -> Bus<'call>
+    where
+        F: FnMut(&NesPPU) + 'call,
+    {
         let temp_rom = test_rom_gen();
+        let ppu = NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring);
 
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: temp_rom.prg_rom.clone(),
-            ppu: NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring),
+            ppu: ppu,
             cycles: 0,
+            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
@@ -71,8 +105,12 @@ impl Bus {
         self.prg_rom[addr as usize] = data;
     }
 
-    pub fn poll_nmi_status(&self) -> bool {
-        self.ppu.get_nmi_status()
+    pub fn poll_nmi_status(&mut self) -> bool {
+        let output = self.ppu.get_nmi_status();
+        if output { 
+            // println!("bus nmi poll gets true");
+        }
+        output
     }
 }
 
@@ -87,7 +125,7 @@ pub trait Mem {
 
 // 
 
-impl Mem for Bus {
+impl Mem for Bus<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             RAM ..= RAM_MIRRORS_END => {
@@ -107,6 +145,10 @@ impl Mem for Bus {
             }
             ROM_MEM_START ..= ROM_MEM_END => {
                 self.read_prg_rom(addr)
+            }
+            0x4016 | 0x4017 => {
+                // don't do anything these are apu calls
+                0
             }
             _ => {
                 println!("Attempted to read memory at unknown address 0x{:04X}", addr);
@@ -144,8 +186,23 @@ impl Mem for Bus {
             ROM_MEM_START ..= ROM_MEM_END => {
                 panic!("Attempted to write to Cartridge ROM space!!!")
             }
+            0x4014 => {
+                let mut cpu_addr = (data as u16) << 8;
+                let mut data = [0u8; 256];
+
+                for i in 0..256u16 {
+                    data[i as usize] = self.mem_read(cpu_addr + i);
+                }
+                self.ppu.oam_dma_write(&data);
+
+                // to do: handle added cycles due to this action as seen on nesdev wiki for 0x4014
+            }
+            0x4016 | 0x4017 => {
+                // don't do anything these are apu calls
+            }
             _ => {
                 println!("Attempted to write memory at unknown address 0x{:04X}", addr);
+                // println!("^^ Above message is likely due to the lack of APU")
             }
         }
     }
@@ -171,7 +228,7 @@ mod test {
 
     #[test]
     fn test_mem_read_write_to_ram() {
-        let mut bus = Bus::new(test::test_rom());
+        let mut bus = Bus::new(test::test_rom(), |ppu| {});
         bus.mem_write(0x01, 0x55);
         assert_eq!(bus.mem_read(0x01), 0x55);
     }

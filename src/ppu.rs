@@ -22,13 +22,13 @@ pub struct NesPPU {
     pub mirroring: Mirroring,
     cycles: usize,
     scanline: u16,
-    trigger_nmi: bool, // Variable cpu reads to see if it should be interrupted
+    pub trigger_nmi: bool, // Variable cpu reads to see if it should be interrupted
 
     addr: AddrRegister,
     status: StatusRegister,
     scroll: ScrollRegister,
     mask: MaskRegister,
-    ctrl: ControlRegister,
+    pub ctrl: ControlRegister,
 }
 
 impl NesPPU {
@@ -105,11 +105,13 @@ impl NesPPU {
 
     // Handles 0x2006 write (updates addr 0x2007 reads or writes from)
     pub fn write_to_ppu_addr(&mut self, value: u8) {
+        // println!("Writing {:08b} to ppu addr 0x2006 register", value);
         self.addr.update(value);
     }
 
     // Handles 0x2000 writes
     pub fn write_to_ctrl(&mut self, value: u8) {
+        // println!("Writing {:08b} to ctrl 0x2000 register", value);
         let prev_ctrl_status = self.ctrl.is_generate_nmi();
         self.ctrl.update(value);
         if !prev_ctrl_status && self.ctrl.is_generate_nmi() && self.status.is_vblank_started() {
@@ -117,8 +119,14 @@ impl NesPPU {
         }
     }
 
-    pub fn get_nmi_status(&self) -> bool {
-        self.trigger_nmi
+    pub fn get_nmi_status(&mut self) -> bool {
+        if self.trigger_nmi == true {
+            self.trigger_nmi = false;
+            // println!("that this is true");
+            return true
+        } else {
+            return false
+        }
     }
 
     // Called upon 0x2007 writes or reads
@@ -193,7 +201,7 @@ impl NesPPU {
 
     // Handles 0x2003 writes
     pub fn oam_addr_write(&mut self, data: u8) {
-        println!("Writing to OAM ADDR: 0x{:02X}", data);
+        // println!("Writing to OAM ADDR: 0x{:02X}", data);
         self.oam_addr = data;
     }
 
@@ -408,8 +416,24 @@ impl ControlRegister {
         self.contains(ControlRegister::SPRITE_PATTERN_ADDR)
     }
 
+    pub fn get_sprite_bank_val(&self) -> u16 {
+        if self.contains(ControlRegister::SPRITE_PATTERN_ADDR) {
+            0x1000
+        } else {
+            0x0000
+        }
+    }
+
     pub fn is_background_pattern_addr(&self) -> bool {
         self.contains(ControlRegister::BACKROUND_PATTERN_ADDR)
+    }
+
+    pub fn get_background_bank_val(&self) -> u16 {
+        if self.contains(ControlRegister::BACKROUND_PATTERN_ADDR) {
+            0x1000
+        } else {
+            0x0000
+        }
     }
 
     pub fn is_sprite_size(&self) -> bool {

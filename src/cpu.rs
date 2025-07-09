@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::rom::Rom;
 use crate::bus::{Bus, Mem};
 
-pub struct CPU {
+pub struct CPU<'a> {
     // Registers
     pub reg_a: u8, // Stores results of arithmetic, logic, and memory access operations
     pub reg_x: u8,
@@ -13,7 +13,7 @@ pub struct CPU {
     pub status: u8, // Each bit stores the 7 status flags (ex. Z = zero flag)
     pub pc: u16, // stores mem address of next byte of code (16 bits cause ram size)
     pub sp: u8,
-    pub bus: Bus,
+    pub bus: Bus<'a>,
     pub extra_cycles: usize
 }
 
@@ -379,8 +379,8 @@ pub enum AddressingMode {
    NoneAddressing,
 }
 
-impl CPU {
-    pub fn new(rom: Rom) -> Self {
+impl<'a> CPU<'a> {
+    pub fn new<'b>(bus: Bus<'b>) -> CPU<'b> {
         CPU {
             reg_a: 0,
             status: 0,
@@ -389,20 +389,7 @@ impl CPU {
             reg_x: 0,
             reg_y: 0,
             extra_cycles: 0,
-            bus: Bus::new(rom),
-        }
-    }
-
-    pub fn new_fake_rom() -> Self {
-        CPU {
-            reg_a: 0,
-            status: 0,
-            pc: 0,
-            sp: 0xFF,
-            reg_x: 0,
-            reg_y: 0,
-            extra_cycles: 0,
-            bus: Bus::new_fake_rom()
+            bus: bus,
         }
     }
 
@@ -535,7 +522,7 @@ impl CPU {
         self.status = 0b0010_0000;
         self.sp = 0xFF;
 
-        self.pc = 0x8000;
+        self.pc = self.mem_read_u16(0xFFFC);
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
@@ -625,14 +612,16 @@ impl CPU {
             loop {
                 callback(self);
 
-                if self.bus.poll_nmi_status() { // Check if there's an NMI interrupt and execute one
-                    println!("Interrupt triggered!!!");
+                let nmi_stat: bool = self.bus.poll_nmi_status();
+                // println!("nmi stat from cpu {}", nmi_stat);
+                if nmi_stat { // Check if there's an NMI interrupt and execute one
+                    // println!("Interrupt triggered!!!");
                     self.interrupt_nmi();
                 }
 
                 // Read the current opcode in binary and convert using our table
                 let opscode = self.mem_read(self.pc);
-                println!("Grabbing opscode {} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
+                // println!("Grabbing opscode 0x{:02X} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
                 let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
 
                 // Move the program counter to point to the next address after opscode
@@ -644,7 +633,7 @@ impl CPU {
                 }
 
                 // Match to the corresponding opscode and run that function
-                println!("Running instruction {}", op_object.code);
+                // println!("Running instruction {}", op_object.code);
 
                 // Decides if the standard program counter increment should take place
                 // We don't increment for stuff like JMP that manually set the PC
@@ -652,7 +641,7 @@ impl CPU {
 
                 match op_object.code {
                     "LDA" => self.lda(&op_object.addressing_mode),
-                    "BRK" => return, // should call brk() but fails to pass test cases w/o return
+                    "BRK" => self.brk(), // should call brk() but fails to pass test cases w/o return
                     "TAX" => self.tax(),
                     "INX" => self.inx(),
                     "CLC" => self.clc(),
@@ -1031,9 +1020,9 @@ impl CPU {
     }
 
     fn jsr(&mut self, mode: &AddressingMode) -> bool {
-        println!("pc points to 0x{:04X} during jsr", self.pc);
+        // println!("pc points to 0x{:04X} during jsr", self.pc);
         let addr = self.get_opperand_address(mode);
-        println!("JSR is attempting to jump to address: 0x{:04X}", addr);
+        // println!("JSR is attempting to jump to address: 0x{:04X}", addr);
 
         // Return address -1 is just next instruction -1
         let return_ptr = self.pc.wrapping_add(1);
@@ -1401,7 +1390,8 @@ mod test {
 
         #[test]
         fn test_lda_from_memory() {
-            let mut cpu = CPU::new_fake_rom();
+            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0x55);
 
             cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
@@ -1411,7 +1401,8 @@ mod test {
 
         #[test]
         fn test_tax_basics() {
-            let mut cpu = CPU::new_fake_rom();
+            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0x13);
             
             cpu.load_and_run(vec![0xa5, 0x10, 0xaa, 0x00]);
@@ -1421,7 +1412,8 @@ mod test {
 
         #[test]
         fn test_inx_basics() {
-            let mut cpu = CPU::new_fake_rom();
+            let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
             cpu.mem_write(0x10, 0xFF);
 
             cpu.load_and_run(vec![0xa5, 0x10, 0xaa, 0xe8, 0x00]);
@@ -1435,7 +1427,8 @@ mod test {
 // SEC TESTING
 #[test]
 fn test_sec_sets_carry_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Run program: SEC (set carry), BRK
     cpu.load_and_run(vec![0x38, 0x00]);
@@ -1447,7 +1440,8 @@ fn test_sec_sets_carry_flag() {
 // BRK TESTING
 #[test]
 fn test_clc_clears_carry_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Run program: SEC (set carry), CLC (clear carry), BRK
     cpu.load_and_run(vec![0x38, 0x18, 0x00]);
@@ -1463,7 +1457,8 @@ mod adc_tests {
 
     #[test]
     fn test_adc_simple_add() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x20);
 
         // Program:
@@ -1487,7 +1482,8 @@ mod adc_tests {
 
     #[test]
     fn test_adc_with_carry_in() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x20, 0x20);
 
         // Program:
@@ -1508,7 +1504,8 @@ mod adc_tests {
 
     #[test]
     fn test_adc_carry_out() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x30, 0x20);
 
         // Program:
@@ -1530,7 +1527,8 @@ mod adc_tests {
 
     #[test]
     fn test_adc_overflow_flag_set() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x40, 0x01);
 
         // Program:
@@ -1552,7 +1550,8 @@ mod adc_tests {
 
     #[test]
     fn test_adc_result_zero() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x50, 0x01);
 
         // Program:
@@ -1577,7 +1576,8 @@ mod adc_tests {
 
 #[test]
 fn test_and_sets_bits_correctly() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // LDA #$F0
     // AND #$0F
     // BRK
@@ -1589,7 +1589,8 @@ fn test_and_sets_bits_correctly() {
 
 #[test]
 fn test_and_sets_negative_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // LDA #$F0
     // AND #$F0
     // BRK
@@ -1601,7 +1602,8 @@ fn test_and_sets_negative_flag() {
 
 #[test]
 fn test_and_zero_flag_not_set() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // LDA #$AA
     // AND #$0F
     // BRK
@@ -1614,7 +1616,8 @@ fn test_and_zero_flag_not_set() {
 
 #[test]
 fn test_asl_accumulator_sets_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x80, // LDA #$80 (1000_0000)
         0x0a,       // ASL A
@@ -1629,7 +1632,8 @@ fn test_asl_accumulator_sets_carry() {
 
 #[test]
 fn test_asl_accumulator_sets_negative() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x40, // LDA #$40 (0100_0000)
         0x0a,       // ASL A -> should become 1000_0000
@@ -1644,7 +1648,8 @@ fn test_asl_accumulator_sets_negative() {
 
 #[test]
 fn test_asl_accumulator_clear_flags() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xa9, 0x01, // LDA #$01
         0x0a,       // ASL A => 0000_0010
@@ -1659,7 +1664,8 @@ fn test_asl_accumulator_clear_flags() {
 
 #[test]
 fn test_bcc_branch_taken() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
     // Program:
@@ -1675,7 +1681,8 @@ fn test_bcc_branch_taken() {
 
 #[test]
 fn test_bcc_branch_not_taken() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Set carry flag first with SEC
     // Program:
@@ -1691,7 +1698,8 @@ fn test_bcc_branch_not_taken() {
 
 #[test]
 fn test_bcc_branch_negative_offset() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
     // Program:
@@ -1711,7 +1719,8 @@ fn test_bcc_branch_negative_offset() {
 
 #[test]
 fn test_bcs_branch_taken() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
     // Program:
@@ -1727,7 +1736,8 @@ fn test_bcs_branch_taken() {
 
 #[test]
 fn test_bcs_branch_not_taken() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Set carry flag first with SEC
     // Program:
@@ -1743,7 +1753,8 @@ fn test_bcs_branch_not_taken() {
 
 #[test]
 fn test_bcs_branch_negative_offset() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Clear carry flag first with CLC
     // Program:
@@ -1763,7 +1774,8 @@ fn test_bcs_branch_negative_offset() {
 
 #[test]
 fn test_beq_branch_taken_forward() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Set zero flag using LDA #$00 (will set Zero flag)
     // Program:
@@ -1779,7 +1791,8 @@ fn test_beq_branch_taken_forward() {
 
 #[test]
 fn test_beq_branch_not_taken() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Clear zero flag using LDA #$01
     // Program:
@@ -1797,7 +1810,8 @@ fn test_beq_branch_not_taken() {
 
 #[test]
 fn test_bit_sets_zero_flag_when_result_zero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // LDA #$00
     // BIT $10 (memory at $10 is $FF => A & M = 0)
     // BRK
@@ -1809,7 +1823,8 @@ fn test_bit_sets_zero_flag_when_result_zero() {
 
 #[test]
 fn test_bit_clears_zero_flag_when_result_nonzero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // LDA #$FF
     // BIT $10 (memory at $10 is $0F => A & M = $0F != 0)
     // BRK
@@ -1821,7 +1836,8 @@ fn test_bit_clears_zero_flag_when_result_nonzero() {
 
 #[test]
 fn test_bit_sets_negative_flag_when_bit_7_of_memory_set() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b1000_0000)
     cpu.mem_write(0x10, 0b1000_0000);
@@ -1832,7 +1848,8 @@ fn test_bit_sets_negative_flag_when_bit_7_of_memory_set() {
 
 #[test]
 fn test_bit_clears_negative_flag_when_bit_7_of_memory_clear() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b0111_1111)
     cpu.mem_write(0x10, 0b0111_1111);
@@ -1843,7 +1860,8 @@ fn test_bit_clears_negative_flag_when_bit_7_of_memory_clear() {
 
 #[test]
 fn test_bit_sets_overflow_flag_when_bit_6_of_memory_set() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b0100_0000)
     cpu.mem_write(0x10, 0b0100_0000);
@@ -1854,7 +1872,8 @@ fn test_bit_sets_overflow_flag_when_bit_6_of_memory_set() {
 
 #[test]
 fn test_bit_clears_overflow_flag_when_bit_6_of_memory_clear() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     // A = anything
     // BIT $10 (memory = 0b1011_1111)
     cpu.mem_write(0x10, 0b1011_1111); // bit 6 = 0
@@ -1866,7 +1885,8 @@ fn test_bit_clears_overflow_flag_when_bit_6_of_memory_clear() {
 //CMP
 #[test]
 fn test_cmp_equal() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDA #$20
     // CMP #$20
@@ -1884,7 +1904,8 @@ fn test_cmp_equal() {
 
 #[test]
 fn test_cmp_less_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDA #$10
     // CMP #$20
@@ -1902,7 +1923,8 @@ fn test_cmp_less_than() {
 
 #[test]
 fn test_cmp_greater_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDA #$30
     // CMP #$20
@@ -1920,7 +1942,8 @@ fn test_cmp_greater_than() {
 
 #[test]
 fn test_cmp_memory_operand() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x42);
 
     // LDA #$50
@@ -1939,7 +1962,8 @@ fn test_cmp_memory_operand() {
 
 #[test]
 fn test_cpy_equal() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDY #$40
     // CPY #$40
@@ -1957,7 +1981,8 @@ fn test_cpy_equal() {
 
 #[test]
 fn test_cpy_less_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDY #$10
     // CPY #$30
@@ -1975,7 +2000,8 @@ fn test_cpy_less_than() {
 
 #[test]
 fn test_cpy_greater_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDY #$50
     // CPY #$20
@@ -1993,7 +2019,8 @@ fn test_cpy_greater_than() {
 
 #[test]
 fn test_cpx_equal() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDX #$20
     // CPX #$20
@@ -2011,7 +2038,8 @@ fn test_cpx_equal() {
 
 #[test]
 fn test_cpx_less_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDX #$10
     // CPX #$20
@@ -2029,7 +2057,8 @@ fn test_cpx_less_than() {
 
 #[test]
 fn test_cpx_greater_than() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDX #$30
     // CPX #$20
@@ -2047,7 +2076,8 @@ fn test_cpx_greater_than() {
 
 #[test]
 fn test_dec_simple() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x42);
 
     // Program:
@@ -2065,7 +2095,8 @@ fn test_dec_simple() {
 
 #[test]
 fn test_dec_to_zero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0x01);
 
     cpu.load_and_run(vec![
@@ -2080,7 +2111,8 @@ fn test_dec_to_zero() {
 
 #[test]
 fn test_dec_negative_result() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0x80);
 
     cpu.load_and_run(vec![
@@ -2095,7 +2127,8 @@ fn test_dec_negative_result() {
 
 #[test]
 fn test_dec_wraparound() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x40, 0x00);
 
     cpu.load_and_run(vec![
@@ -2110,7 +2143,8 @@ fn test_dec_wraparound() {
 
 #[test]
 fn test_dex_simple() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // LDX #$42
     // DEX
@@ -2128,7 +2162,8 @@ fn test_dex_simple() {
 
 #[test]
 fn test_dex_to_zero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA2, 0x01, // LDX #$01
@@ -2143,7 +2178,8 @@ fn test_dex_to_zero() {
 
 #[test]
 fn test_dex_wraparound() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA2, 0x00, // LDX #$00
@@ -2158,7 +2194,8 @@ fn test_dex_wraparound() {
 
 #[test]
 fn test_dey_simple() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0x10, // LDY #$10
@@ -2173,7 +2210,8 @@ fn test_dey_simple() {
 
 #[test]
 fn test_dey_to_zero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0x01, // LDY #$01
@@ -2188,7 +2226,8 @@ fn test_dey_to_zero() {
 
 #[test]
 fn test_dey_wraparound() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0x00, // LDY #$00
@@ -2203,7 +2242,8 @@ fn test_dey_wraparound() {
 
 #[test]
 fn test_eor_non_zero_non_negative() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_1100); // 0x0C
 
     cpu.load_and_run(vec![
@@ -2219,7 +2259,8 @@ fn test_eor_non_zero_non_negative() {
 
 #[test]
 fn test_eor_zero_result() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0b0101_0101); // 0x55
 
     cpu.load_and_run(vec![
@@ -2235,7 +2276,8 @@ fn test_eor_zero_result() {
 
 #[test]
 fn test_eor_result_negative() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0b1111_0000); // 0xF0
 
     cpu.load_and_run(vec![
@@ -2251,7 +2293,8 @@ fn test_eor_result_negative() {
 
 #[test]
 fn test_inc_normal_increment() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0x1A); // Initial value
 
     cpu.load_and_run(vec![
@@ -2266,7 +2309,8 @@ fn test_inc_normal_increment() {
 
 #[test]
 fn test_inc_sets_zero_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0xFF); // 0xFF + 1 wraps to 0x00
 
     cpu.load_and_run(vec![
@@ -2281,7 +2325,8 @@ fn test_inc_sets_zero_flag() {
 
 #[test]
 fn test_inc_sets_negative_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0x7F); // 0x7F + 1 = 0x80 (negative)
 
     cpu.load_and_run(vec![
@@ -2296,7 +2341,8 @@ fn test_inc_sets_negative_flag() {
 
 #[test]
 fn test_iny_normal_increment() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0x05, // LDY #$05
@@ -2311,7 +2357,8 @@ fn test_iny_normal_increment() {
 
 #[test]
 fn test_iny_sets_zero_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0xFF, // LDY #$FF
@@ -2326,7 +2373,8 @@ fn test_iny_sets_zero_flag() {
 
 #[test]
 fn test_iny_sets_negative_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA0, 0x7F, // LDY #$7F
@@ -2341,7 +2389,8 @@ fn test_iny_sets_negative_flag() {
 
 #[test]
 fn test_jmp_absolute() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x38,             // SEC
@@ -2358,7 +2407,8 @@ fn test_jmp_absolute() {
 
 #[test]
 fn test_jmp_indirect() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.mem_write_u16(0x0010, 0x8005);
 
@@ -2377,7 +2427,8 @@ fn test_jmp_indirect() {
 
 #[test]
 fn test_broken_jmp() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     // Memory stuff for the jump
     cpu.mem_write(0x1000, 0x10);
@@ -2396,7 +2447,8 @@ fn test_broken_jmp() {
 
 #[test]
 fn test_jsr_forward_jump() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x20, 0x07, 0x80, // JSR $0005 (simulate calling the JRS)
@@ -2413,7 +2465,8 @@ fn test_jsr_forward_jump() {
 
 #[test]
 fn test_jsr_backward_jump() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x18,             // CLC
@@ -2431,7 +2484,8 @@ fn test_jsr_backward_jump() {
 
 #[test]
 fn test_rts_sets_carry_and_returns() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x18,             // CLC
@@ -2453,7 +2507,8 @@ fn test_rts_sets_carry_and_returns() {
 
 #[test]
 fn test_lsr_accumulator_no_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_1010, // LDA #$0A (10)
         0x4A,             // LSR A
@@ -2468,7 +2523,8 @@ fn test_lsr_accumulator_no_carry() {
 
 #[test]
 fn test_lsr_accumulator_carry_set() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0101, // LDA #$05
         0x4A,             // LSR A
@@ -2483,7 +2539,8 @@ fn test_lsr_accumulator_carry_set() {
 
 #[test]
 fn test_lsr_accumulator_result_zero() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0001, // LDA #$01
         0x4A,             // LSR A
@@ -2498,7 +2555,8 @@ fn test_lsr_accumulator_result_zero() {
 
 #[test]
 fn test_lsr_zero_page() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b1000_0000); // value at $0010
 
     cpu.load_and_run(vec![
@@ -2514,7 +2572,8 @@ fn test_lsr_zero_page() {
 
 #[test]
 fn test_lsr_absolute_sets_zero_and_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x1234, 0x01); // value at $1234
 
     cpu.load_and_run(vec![
@@ -2530,7 +2589,8 @@ fn test_lsr_absolute_sets_zero_and_carry() {
 
 #[test]
 fn test_nop_function() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xEA,
@@ -2545,7 +2605,8 @@ fn test_nop_function() {
 
 #[test]
 fn test_ora_non_zero_non_negative() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_1100); // 0x0C
 
     cpu.load_and_run(vec![
@@ -2561,7 +2622,8 @@ fn test_ora_non_zero_non_negative() {
 
 #[test]
 fn test_ora_zero_result() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x20, 0b0000_0000); // 0x00
 
     cpu.load_and_run(vec![
@@ -2577,7 +2639,8 @@ fn test_ora_zero_result() {
 
 #[test]
 fn test_ora_result_negative() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x30, 0b1111_0000); // 0xF0
 
     cpu.load_and_run(vec![
@@ -2593,7 +2656,8 @@ fn test_ora_result_negative() {
 
 #[test]
 fn test_pha_pushes_accumulator() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA9, 0x42, // LDA #$42
@@ -2607,7 +2671,8 @@ fn test_pha_pushes_accumulator() {
 
 #[test]
 fn test_php_pushes_status_register() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x38,       // SEC (Set Carry)
@@ -2625,7 +2690,8 @@ fn test_php_pushes_status_register() {
 
 #[test]
 fn test_pla_sets_accumulator_correctly() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA9, 0x42,       // LDA #$42
@@ -2642,7 +2708,8 @@ fn test_pla_sets_accumulator_correctly() {
 
 #[test]
 fn test_pla_sets_zero_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA9, 0x00,       // LDA #$00
@@ -2659,7 +2726,8 @@ fn test_pla_sets_zero_flag() {
 
 #[test]
 fn test_pla_sets_negative_flag() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0xA9, 0x80,       // LDA #$80
@@ -2676,7 +2744,8 @@ fn test_pla_sets_negative_flag() {
 
 #[test]
 fn test_plp_sets_status_register() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
 
     cpu.load_and_run(vec![
         0x08,             // PHP (push current status)
@@ -2694,7 +2763,8 @@ fn test_plp_sets_status_register() {
 
 #[test]
 fn test_rol_accumulator_no_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0100_0000, // LDA #$40
         0x2A,             // ROL A
@@ -2709,7 +2779,8 @@ fn test_rol_accumulator_no_carry() {
 
 #[test]
 fn test_rol_accumulator_sets_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b1000_0000, // LDA #$80
         0x2A,             // ROL A
@@ -2724,7 +2795,8 @@ fn test_rol_accumulator_sets_carry() {
 
 #[test]
 fn test_rol_zero_page_with_carry_in() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x10, 0b0000_0001);
 
     // Set carry flag before ROL
@@ -2742,7 +2814,8 @@ fn test_rol_zero_page_with_carry_in() {
 
 #[test]
 fn test_ror_accumulator_no_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0010, // LDA #$02
         0x6A,             // ROR A
@@ -2757,7 +2830,8 @@ fn test_ror_accumulator_no_carry() {
 
 #[test]
 fn test_ror_accumulator_sets_carry() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.load_and_run(vec![
         0xA9, 0b0000_0001, // LDA #$01
         0x6A,             // ROR A
@@ -2772,7 +2846,8 @@ fn test_ror_accumulator_sets_carry() {
 
 #[test]
 fn test_ror_absolute_with_carry_in() {
-    let mut cpu = CPU::new_fake_rom();
+    let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
     cpu.mem_write(0x1234, 0b0000_0000);
 
     cpu.load_and_run(vec![
@@ -2793,7 +2868,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_simple_sub() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x10, 0x10);
 
         // LDA #$30
@@ -2815,7 +2891,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_with_borrow() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x20, 0x40);
 
         // LDA #$30
@@ -2836,7 +2913,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_with_carry_in() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x30, 0x01);
 
         // LDA #$03
@@ -2857,7 +2935,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_result_zero() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x40, 0x10);
 
         // LDA #$10
@@ -2878,7 +2957,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_negative_result() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x50, 0x20);
 
         // LDA #$10
@@ -2899,7 +2979,8 @@ mod sbc_tests {
 
     #[test]
     fn test_sbc_overflow_flag_set() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.mem_write(0x60, 0xFF);
 
         // LDA #$80
@@ -2925,7 +3006,8 @@ mod sta_tests {
 
     #[test]
     fn test_sta_zero_page() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA9, 0x42, // LDA #$42
             0x85, 0x10, // STA $10
@@ -2936,7 +3018,8 @@ mod sta_tests {
 
     #[test]
     fn test_sta_absolute() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA9, 0x99,       // LDA #$99
             0x8D, 0x00, 0x10, // STA $2000
@@ -2947,7 +3030,8 @@ mod sta_tests {
 
     #[test]
     fn test_sta_zero_page_x() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x04, // LDX #$04
             0xA9, 0xAA, // LDA #$AA
@@ -2964,7 +3048,8 @@ mod stx_tests {
 
     #[test]
     fn test_stx_zero_page() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x33, // LDX #$33
             0x86, 0x20, // STX $20
@@ -2975,7 +3060,8 @@ mod stx_tests {
 
     #[test]
     fn test_stx_absolute() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x77,       // LDX #$77
             0x8E, 0x00, 0x10, // STX $3000
@@ -2986,7 +3072,8 @@ mod stx_tests {
 
     #[test]
     fn test_stx_zero_page_y() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA2, 0x66, // LDX #$66
             0xA0, 0x05, // LDY #$05
@@ -3003,7 +3090,8 @@ mod sty_tests {
 
     #[test]
     fn test_sty_zero_page() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0x55, // LDY #$55
             0x84, 0x30, // STY $30
@@ -3014,7 +3102,8 @@ mod sty_tests {
 
     #[test]
     fn test_sty_absolute() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0x11,       // LDY #$11
             0x8C, 0x00, 0x10, // STY $4000
@@ -3025,7 +3114,8 @@ mod sty_tests {
 
     #[test]
     fn test_sty_zero_page_x() {
-        let mut cpu = CPU::new_fake_rom();
+        let mut bus = Bus::new_fake_rom(|ppu| {});
+            let mut cpu = CPU::new(bus);
         cpu.load_and_run(vec![
             0xA0, 0xFE, // LDY #$FE
             0xA2, 0x03, // LDX #$03

@@ -43,7 +43,10 @@ impl Rom {
 
         let skip_trainer = raw[6] & 0b100 != 0;
 
-        let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
+        let mut prg_rom_start = 16;
+        if skip_trainer {
+            prg_rom_start += 512;
+        }
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
         println!("PRG ROM INFORMATION: start: {} size: {}", prg_rom_start, prg_rom_size);
