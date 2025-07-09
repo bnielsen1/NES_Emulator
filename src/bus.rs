@@ -46,13 +46,16 @@ impl<'a> Bus<'a> {
     }
 
     pub fn tick(&mut self, cycles: usize) {
+        // println!("bus cycles: {}", self.cycles);
         self.cycles += cycles;
 
 
         // Read NMI status before and after a ppu clock cycle to see
         // if we just entered VBlank -> meaning a screen is ready to be rendered
         let nmi_before = self.ppu.trigger_nmi;
-        self.ppu.tick(cycles * 3); // ppu ticks 3 times faster than CPU
+        for _ in 0..3 {
+            self.ppu.tick(cycles); // ppu ticks 3 times faster than CPU
+        }
         let nmi_after = self.ppu.trigger_nmi;
 
         // Call the gameloop function which will handle rendering other possible inputs
@@ -191,13 +194,13 @@ impl Mem for Bus<'_> {
                 self.mem_write(mirrored_addr, data);
             }
             ROM_MEM_START ..= ROM_MEM_END => {
-                panic!("Attempted to write to Cartridge ROM space!!!")
+                panic!("Attempted to write to Cartridge ROM space address: 0x{:04X}", addr)
             }
             0x4000 | 0x4001 | 0x4002 | 0x4003 | 0x4006 | 0x4005 | 0x4007 | 0x4004 => {
                 // APU IGNORE
             }
             0x4014 => {
-                let mut cpu_addr = (data as u16) << 8;
+                let cpu_addr = (data as u16) << 8;
                 let mut data = [0u8; 256];
 
                 for i in 0..256u16 {

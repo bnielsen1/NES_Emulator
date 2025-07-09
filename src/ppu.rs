@@ -76,13 +76,19 @@ impl NesPPU {
     }
 
     pub fn tick(&mut self, cycles: usize) -> bool {
+        
         self.cycles += cycles;
+        // println!("does ppu tick? cycles: {}", self.cycles);
         if self.cycles >= 341 {
             self.cycles -= 341;
 
             self.scanline += 1;
+            // println!("ppu scanline: {} and status reg 0b{:08b}", self.scanline, self.status.bits());
+            // println!("current cpu SCANLINE: {}", self.scanline);
             if self.scanline == 241 { // Trigger interupt at 241st scanline (offscreen)
                 self.status.set_vblank_started(true);
+                // println!("PPU: VBlank set scanline {})", self.scanline);
+                // println!("ppu set vblank status true AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
                 self.status.set_sprite_zero_hit(false);
                 if self.ctrl.is_generate_nmi() {
                     self.trigger_nmi = true;
@@ -94,6 +100,7 @@ impl NesPPU {
                 self.trigger_nmi = false;
                 self.scanline = 0;
                 self.status.set_vblank_started(false);
+                // println!("pp");
                 self.status.set_sprite_overflow(false);
                 self.status.set_sprite_zero_hit(false);
                 return true;
@@ -180,6 +187,10 @@ impl NesPPU {
 
     // Handles 0x2002 reads
     pub fn read_status(&mut self) -> u8 {
+        if self.status.bits() & 0b1000_0000 == 0b1000_0000 {
+            // println!("Read should have had a status with negative bit turned on!");
+        }
+        // println!("Read ppu status with result {}", self.status.bits());
 
         // Reset 0x2005 0x2006 latches
         self.addr.reset_latch();
