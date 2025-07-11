@@ -546,7 +546,7 @@ impl<'a> CPU<'a> {
     }
 
     fn is_page_cross(&self, addr: u16, offset: u8) -> bool {
-        (addr & 0xFF00) != ((addr + offset as u16) & 0xFF00)
+        (addr & 0xFF00) != ((addr.wrapping_add(offset as u16)) & 0xFF00)
     }
 
     fn calc_page_cycles(&mut self, mode: &AddressingMode) -> usize {
@@ -607,6 +607,41 @@ impl<'a> CPU<'a> {
         self.pc = self.mem_read_u16(0xFFFE); // Set the pc to run whatever instruction our ROM runs on NMI interrupts
     }
 
+    fn trace_status(&mut self, op_code: &OpCode, cycles: usize, old_pc: u16) {
+        // PC REGISTER
+        print!("${:04X} ", old_pc);
+        let mut cur_addr = old_pc; 
+
+        // CPU opcode
+        let mut num_instructions = op_code.bytes;
+        for i in 0..3 {
+            if num_instructions != 0 {
+                num_instructions -= 1;
+                print!("${:02X} ", self.mem_read(cur_addr));
+                cur_addr = cur_addr.wrapping_add(1);
+            } else {
+                print!("   ");
+            }
+        }
+
+        // ASSEMBLY CPU OPCODE
+
+        // get the name of instruction
+        print!("{} ", op_code.code);
+
+        // Untranslated value of PC for arguments
+        if op_code.bytes == 0 {
+            print!("")
+        }
+
+        /*
+        FINISH IMPLEMENTING THIS BEFORE CONTINUING FURTHER
+        SEE SECTION 5.1 of text book to see what else I should do.
+        I'm currently trying to implement the third column
+         */
+
+    }
+
     pub fn run_with_callback<F>(&mut self, mut callback: F) 
         where
             F: FnMut(&mut CPU),
@@ -624,7 +659,7 @@ impl<'a> CPU<'a> {
                 // Read the current opcode in binary and convert using our table
                 let opscode = self.mem_read(self.pc);
                 if opscode != 0xEA {
-                    // println!("Grabbing opscode 0x{:02X} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
+                    println!("Grabbing opscode 0x{:02X} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
                 }
                 let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
 
@@ -638,7 +673,7 @@ impl<'a> CPU<'a> {
 
                 // Match to the corresponding opscode and run that function
                 if opscode != 0xEA {
-                    // println!("Running instruction {}", op_object.code);
+                    println!("Running instruction {}", op_object.code);
                 }
 
                 // Decides if the standard program counter increment should take place
@@ -904,7 +939,7 @@ impl<'a> CPU<'a> {
 
     fn bpl(&mut self) {
         if self.test {
-            println!("bpl run status flag: 0b{:08b}", self.status);
+            // println!("bpl run status flag: 0b{:08b}", self.status);
         }
         if (self.status ^ 0b1000_0000) & 0b1000_0000 == 0b1000_0000 {
             // println!("negative flag is clear in bpl!");
@@ -913,7 +948,7 @@ impl<'a> CPU<'a> {
             self.conditional_cycle_check(self.pc, offset as u8);
             self.pc = self.pc.wrapping_add(offset as u16);
         } else {
-            println!("Branch should have happened due to negative bit PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP");
+            // println!("Branch should have happened due to negative bit PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP");
         }
     }
 

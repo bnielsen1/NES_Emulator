@@ -55,6 +55,7 @@ impl NesPPU {
     }
 
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
+        println!("CHR ROM when creating ppu size: {}", chr_rom.len());
         NesPPU {
             chr_rom: chr_rom,
             mirroring: mirroring,

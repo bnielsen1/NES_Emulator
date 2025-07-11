@@ -41,7 +41,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240).unwrap();
 
     //load the game
-    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Projects/Rust/NES_Emulator/src/pacman.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/nestest.nes").unwrap();
     let rom = Rom::new(&bytes).unwrap();
 
     let mut frame = Frame::new(); // The current frame to be drawn by sdl2
