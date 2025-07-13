@@ -395,7 +395,7 @@ impl<'a> CPU<'a> {
     }
 
     // Getting operand information
-    fn get_opperand_address(&mut self, mode: &AddressingMode) -> u16 {
+    pub fn get_opperand_address(&mut self, mode: &AddressingMode) -> u16 {
         // Do standard mode matching
         match mode {
             AddressingMode::Immediate => self.pc, // raw value at the address already
@@ -449,6 +449,83 @@ impl<'a> CPU<'a> {
         }
     }
 
+    pub fn debug_operand(&self, old_pc: u16, mode: &AddressingMode) -> u16 {
+        // Caller prints the output of mem reading this calls return value
+        match mode {
+            AddressingMode::Immediate => old_pc, // no print cause upper function already prints
+            AddressingMode::ZeroPage => {
+                let output = self.mem_peek(old_pc) as u16;
+                // print!("({:02X}) @ ", output);
+                output
+            }, // pc stores 1 byte addr
+            AddressingMode::ZeroPage_X => {
+                let addr = self.mem_peek(old_pc);
+                // print!("(${:02X}),X) ", addr);
+                let output = addr.wrapping_add(self.reg_x) as u16;
+                // print!("@ {:02X} = ", output); // sum
+                output
+            },
+            AddressingMode::ZeroPage_Y => {
+                let addr = self.mem_peek(old_pc);
+                // print!("(${:02X}),Y) ", addr);
+                let output = addr.wrapping_add(self.reg_y) as u16;
+                // print!("@ {:04X} = ", output); // sum
+                output
+            },
+            AddressingMode::Absolute => {
+                let output = self.mem_peek_u16(old_pc);
+                // print!("(${:04X}) @ ", output);
+                output
+            },
+            AddressingMode::Absolute_X => {
+                let addr = self.mem_peek_u16(old_pc);
+                // print!("(${:04X},X) @ ", addr);
+                let output = addr.wrapping_add(self.reg_x as u16);
+                // print!("{:04X} = ", output);
+                output
+            },
+            AddressingMode::Absolute_Y => {
+                let addr = self.mem_peek_u16(old_pc);
+                // print!("(${:04X},Y) @ ", addr);
+                let output = addr.wrapping_add(self.reg_y as u16);
+                // print!("{:04X} = ", output);
+                output
+            },
+            AddressingMode::Indirect => {
+                let output = self.mem_peek_u16(old_pc);
+                // print!("({:04X}) @ ", output);
+                output
+            }
+            AddressingMode::Indirect_X => {
+                let addr = self.mem_peek(old_pc);
+                // print!("({:04X},X) @ ", addr);
+                let ptr = addr.wrapping_add(self.reg_x);
+                print!("{:04X} = ", ptr);
+
+                let low = self.mem_peek(ptr as u16);
+                let high = self.mem_peek(ptr.wrapping_add(1) as u16);
+                let output = (high as u16) << 8 | (low as u16);
+                // print!("{:04X} = ", ptr);
+                output
+            },
+            AddressingMode::Indirect_Y => {
+                let addr = self.mem_peek(old_pc);
+                // print!("({:04X},Y) @ ", addr);
+
+                let low = self.mem_peek(addr as u16);
+                let high = self.mem_peek((addr as u8).wrapping_add(1) as u16);
+                let ptr = (high as u16) << 8 | (low as u16);
+                // print!("{:04X} = ", ptr);
+                let output = ptr.wrapping_add(self.reg_y as u16);
+                // print!("{:04X} = ", ptr);
+                output
+            }
+            AddressingMode::NoneAddressing => {
+                panic!("Mode {:?} is not supported", mode);
+            }
+        }
+    }
+
     // Memory related functions
 
     pub fn mem_read(&mut self, addr: u16) -> u8 {
@@ -465,6 +542,15 @@ impl<'a> CPU<'a> {
 
     pub fn mem_write_u16(&mut self, addr: u16, data: u16) {
         self.bus.mem_write_u16(addr, data);
+    }
+
+    // TESTING READS
+    pub fn mem_peek(&self, addr: u16) -> u8 {
+        self.bus.mem_peek(addr)
+    }
+
+    pub fn mem_peek_u16(&self, addr: u16) -> u16 {
+        self.bus.mem_peek_u16(addr)
     }
 
     pub fn mem_write_test(&mut self, addr: u16, data: u8) {
@@ -607,7 +693,13 @@ impl<'a> CPU<'a> {
         self.pc = self.mem_read_u16(0xFFFE); // Set the pc to run whatever instruction our ROM runs on NMI interrupts
     }
 
-    fn trace_status(&mut self, op_code: &OpCode, cycles: usize, old_pc: u16) {
+    fn new_trace_status(&mut self, op_code: &OpCode, old_pc: u16) {
+
+    }
+
+    fn trace_status(&mut self, op_code: &OpCode, old_pc: u16) {
+        // old_pc should be the PC pointing to the instruction
+
         // PC REGISTER
         print!("${:04X} ", old_pc);
         let mut cur_addr = old_pc; 
@@ -617,7 +709,7 @@ impl<'a> CPU<'a> {
         for i in 0..3 {
             if num_instructions != 0 {
                 num_instructions -= 1;
-                print!("${:02X} ", self.mem_read(cur_addr));
+                print!("{:02X} ", self.mem_read(cur_addr));
                 cur_addr = cur_addr.wrapping_add(1);
             } else {
                 print!("   ");
@@ -629,15 +721,34 @@ impl<'a> CPU<'a> {
         // get the name of instruction
         print!("{} ", op_code.code);
 
+        cur_addr = old_pc + 1;
+
         // Untranslated value of PC for arguments
         if op_code.bytes == 0 {
-            print!("")
+            print!("");
+        } else {
+            let ptr = self.debug_operand(cur_addr, &op_code.addressing_mode);
+            let output = self.mem_read(ptr);
+            print!("{} ", output);
         }
 
+        // ALL CPU REGISTERS
+        print!("A:{:02X} ", self.reg_a);
+        print!("X:{:02X} ", self.reg_x);
+        print!("Y:{:02X} ", self.reg_y);
+        print!("SP:{:02X} ", self.sp);
+        print!("S:{:08b} ", self.status);
+
+        // PPU STATUS
+        print!("PPU: ");
+        print!("SL: {} ", self.bus.ppu.scanline);
+        print!("CYC: {}", self.bus.ppu.cycles);
+
+        println!("");
         /*
         FINISH IMPLEMENTING THIS BEFORE CONTINUING FURTHER
         SEE SECTION 5.1 of text book to see what else I should do.
-        I'm currently trying to implement the third column
+        I'm currently trying to implement the third column  
          */
 
     }
@@ -659,9 +770,11 @@ impl<'a> CPU<'a> {
                 // Read the current opcode in binary and convert using our table
                 let opscode = self.mem_read(self.pc);
                 if opscode != 0xEA {
-                    println!("Grabbing opscode 0x{:02X} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
+                    // println!("Grabbing opscode 0x{:02X} at 0x{:04X} on the pc", self.mem_read(self.pc), self.pc);
                 }
                 let op_object: &OpCode = OPCODE_TABLE.get(&opscode).unwrap();
+
+                // self.trace_status(op_object, self.pc);
 
                 // Move the program counter to point to the next address after opscode
                 self.pc += 1;
@@ -673,7 +786,7 @@ impl<'a> CPU<'a> {
 
                 // Match to the corresponding opscode and run that function
                 if opscode != 0xEA {
-                    println!("Running instruction {}", op_object.code);
+                    // println!("Running instruction {}", op_object.code);
                 }
 
                 // Decides if the standard program counter increment should take place
@@ -723,7 +836,7 @@ impl<'a> CPU<'a> {
                         should_inc = self.rts();
                     },
                     "LSR" => self.lsr(&op_object.addressing_mode),
-                    "NOP" => continue,
+                    "NOP" => {},
                     "ORA" => self.ora(&op_object.addressing_mode),
                     "PHA" => self.pha(),
                     "PHP" => self.php(),
@@ -898,7 +1011,7 @@ impl<'a> CPU<'a> {
         // Update N flag
         if (param & 0b1000_0000) == 0b1000_0000 {
             self.update_n_flag(true);
-            println!("NEGATIVE FLAG ON?? ======================================================");
+            // println!("NEGATIVE FLAG ON?? ======================================================");
             self.test = true;
         } else {
             self.update_n_flag(false);
@@ -906,7 +1019,7 @@ impl<'a> CPU<'a> {
         }
 
         if self.test {
-            println!("bit after n status flag: 0b{:08b}", self.status);
+            // println!("bit after n status flag: 0b{:08b}", self.status);
         }
 
         // Update O flag
@@ -917,7 +1030,7 @@ impl<'a> CPU<'a> {
         }
 
         if self.test {
-            println!("bit end status flag: 0b{:08b}", self.status);
+            // println!("bit end status flag: 0b{:08b}", self.status);
         }
     }
 

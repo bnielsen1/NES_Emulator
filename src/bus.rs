@@ -23,7 +23,7 @@ pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     joypad1: Joypad,
     pub prg_rom: Vec<u8>,
-    ppu: NesPPU,
+    pub ppu: NesPPU,
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
@@ -124,8 +124,10 @@ impl<'a> Bus<'a> {
 
 pub trait Mem {
     fn mem_read(&mut self, addr: u16) -> u8;
+    fn mem_peek(&self, addr: u16) -> u8;
     fn mem_write(&mut self, addr: u16, data: u8);
     fn mem_read_u16(&mut self, addr: u16) -> u16;
+    fn mem_peek_u16(&self, addr: u16) -> u16;
     fn mem_write_u16(&mut self, addr: u16, data: u16);
     fn mem_write_test(&mut self, addr: u16, data: u8);
 }
@@ -167,9 +169,50 @@ impl Mem for Bus<'_> {
         }
     }
 
+    fn mem_peek(&self, addr: u16) -> u8 {
+        match addr {
+            RAM ..= RAM_MIRRORS_END => {
+                let mirrored_addr = addr & 0b00000111_11111111;
+                self.cpu_vram[mirrored_addr as usize]
+            }
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+                println!("Attempt to read from write-only PPU address 0x{:04X}", addr);
+                0x00
+            }
+            0x2002 => self.ppu.peek_status(),
+            0x2004 => self.ppu.oam_data_read(),
+            0x2007 => self.ppu.peek_data(),
+            0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
+                // Recall function with address properly mirrored
+                let mirrored_addr = addr &0b0010000_00000111;
+                self.mem_peek(mirrored_addr)
+            }
+            ROM_MEM_START ..= ROM_MEM_END => {
+                self.read_prg_rom(addr)
+            }
+            0x4016 => {
+                self.joypad1.peek()
+            }
+            0x4017 => {
+                // this is controller 2 which is not implemented yet
+                0
+            }
+            _ => {
+                println!("Attempted to read memory at unknown address 0x{:04X}", addr);
+                0
+            }
+        }
+    }
+
     fn mem_read_u16(&mut self, addr: u16) -> u16 {
         let lo = self.mem_read(addr) as u16;
         let hi = self.mem_read(addr + 1) as u16;
+        (hi << 8) | lo
+    }
+
+    fn mem_peek_u16(&self, addr: u16) -> u16 {
+        let lo = self.mem_peek(addr) as u16;
+        let hi = self.mem_peek(addr + 1) as u16;
         (hi << 8) | lo
     }
 

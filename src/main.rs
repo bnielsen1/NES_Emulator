@@ -6,6 +6,7 @@ mod ppu;
 mod frame;
 mod render;
 mod joypad;
+mod trace;
 
 use std::collections::HashMap;
 
@@ -15,6 +16,7 @@ use crate::joypad::Joypad;
 use crate::rom::Rom;
 use crate::frame::Frame;
 use crate::ppu::NesPPU;
+use crate::trace::trace;
 
 use rand::Rng;
 use sdl2::event::Event;
@@ -41,7 +43,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240).unwrap();
 
     //load the game
-    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/nestest.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/smb.nes").unwrap();
     let rom = Rom::new(&bytes).unwrap();
 
     let mut frame = Frame::new(); // The current frame to be drawn by sdl2
@@ -97,7 +99,10 @@ fn main() {
     let mut cpu = CPU::new(bus);
 
     cpu.reset();
-    cpu.run();
+    cpu.run_with_callback(move |cpu| {
+        // println!("{}", trace(cpu));
+        // println!("MORE PPU DATA: VBLANK: {} CTRL: {:08b}, STATUS: {:08b}", cpu.bus.ppu.trigger_nmi, cpu.bus.ppu.ctrl.bits(), cpu.bus.ppu.peek_status());
+    });
 
 
 }

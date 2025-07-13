@@ -20,13 +20,13 @@ pub struct NesPPU {
     pub ppu_status: u8,
 
     pub mirroring: Mirroring,
-    cycles: usize,
-    scanline: u16,
+    pub cycles: usize,
+    pub scanline: u16,
     pub trigger_nmi: bool, // Variable cpu reads to see if it should be interrupted
 
     addr: AddrRegister,
     status: StatusRegister,
-    scroll: ScrollRegister,
+    pub scroll: ScrollRegister,
     mask: MaskRegister,
     pub ctrl: ControlRegister,
 }
@@ -81,6 +81,10 @@ impl NesPPU {
         self.cycles += cycles;
         // println!("does ppu tick? cycles: {}", self.cycles);
         if self.cycles >= 341 {
+            if self.is_sprite_0_hit(self.cycles) {
+                self.status.set_sprite_zero_hit(true);
+            }
+
             self.cycles -= 341;
 
             self.scanline += 1;
@@ -109,6 +113,13 @@ impl NesPPU {
         }
         
         return false;
+    }
+
+    fn is_sprite_0_hit(&self, cycle: usize) -> bool {
+        let x = self.oam_data[3] as usize; // Sprite 0s x coordinate
+        let y = self.oam_data[0] as usize; // Sprite 0s y coordinate
+        
+        (y == self.scanline as usize) && (x <= cycle) && self.mask.is_sprite_rendering()
     }
 
     // Handles 0x2006 write (updates addr 0x2007 reads or writes from)
@@ -166,6 +177,26 @@ impl NesPPU {
         }
     }
 
+    pub fn peek_data(&self) -> u8 {
+        let addr = self.addr.get();
+
+        match addr {
+            0..=0x1FFF => {
+                let result = self.internal_data_buf;
+                result
+            },
+            0x2000..=0x2FFF => {
+                let result = self.internal_data_buf;
+                result  
+            },
+            0x3000..=0x3EFF => panic!("Addr space 0x3000..=0x3EFF is not expected to be used. Attempted to read 0x{:04X}", addr),
+            0x3F00..=0x3FFF => {
+                self.palette_table[(addr - 0x3F00) as usize]
+            },
+            _ => panic!("Unexpected read access to mirrored space {}", addr),
+        }
+    }
+
     // For write on 0x2007
     pub fn write_to_data(&mut self, data: u8) {
         let addr = self.addr.get();
@@ -199,6 +230,10 @@ impl NesPPU {
         
         // Return output
         self.status.read()
+    }
+
+    pub fn peek_status(&self) -> u8 {
+        self.status.peek()
     }
 
     // Handles 0x2005 writes
@@ -335,6 +370,10 @@ impl StatusRegister {
         output
     }
 
+    pub fn peek(&self) -> u8 {
+        self.bits()
+    }
+
     // Used to read current state for debugging purposes
     pub fn current_val(&self) -> u8 {
         self.bits()
@@ -414,6 +453,15 @@ bitflags! {
 impl ControlRegister {
     pub fn new() -> Self {
         ControlRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    pub fn read_nametable(&self) -> u16 {
+        match (self.contains(ControlRegister::NAMETABLE1), self.contains(ControlRegister::NAMETABLE2))  {
+            (false, false) => 0x2000,
+            (true, false) => 0x2400,
+            (false, true) => 0x2800,
+            (true, true) => 0x2C00
+        }
     }
 
     pub fn is_nametable1(&self) -> bool {

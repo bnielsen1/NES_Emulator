@@ -40,7 +40,7 @@ impl Joypad {
     }
 
     pub fn read(&mut self) -> u8 {
-        if self.button_index > 7 { // if we
+        if self.button_index > 7 {
             return 1;
         }
 
@@ -53,6 +53,14 @@ impl Joypad {
         if !self.strobe_status && self.button_index <= 7 {
             self.button_index += 1;
         }
+        response
+    }
+
+    pub fn peek(&self) -> u8 {
+        if self.button_index > 7 {
+            return 1;
+        }
+        let response = (self.button_status.bits() & (1 << self.button_index)) >> self.button_index;
         response
     }
 
