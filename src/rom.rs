@@ -1,3 +1,7 @@
+use crate::mapper::Mapper;
+use crate::mapping::mapper0::Mapper0;
+
+use std::{cell::RefCell, rc::Rc};
 
 const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 const PRG_ROM_PAGE_SIZE: usize = 16384;
@@ -13,7 +17,7 @@ pub enum Mirroring {
 pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
-    pub mapper: u8,
+    pub mapper_id: u8,
     pub screen_mirroring: Mirroring,
 }
 
@@ -23,7 +27,8 @@ impl Rom {
             return Err("File is not in iNES file format".to_string());
         }
 
-        let mapper = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
+        let mapper_id = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
+        
 
         let ines_ver = (raw[7] >> 2) & 0b11;
         if ines_ver != 0 {
@@ -52,10 +57,13 @@ impl Rom {
         println!("PRG ROM INFORMATION: start: {} size: {}", prg_rom_start, prg_rom_size);
         println!("CHR ROM INFORMATION: start: {} size: {}", chr_rom_start, chr_rom_size);
 
+        let prg_rom = raw[prg_rom_start..(prg_rom_start+prg_rom_size)].to_vec();
+        let chr_rom = raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec();
+
         Ok(Rom {
             prg_rom: raw[prg_rom_start..(prg_rom_start+prg_rom_size)].to_vec(),
             chr_rom: raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec(),
-            mapper,
+            mapper_id,
             screen_mirroring
         })
     }
@@ -81,6 +89,20 @@ impl Rom {
 
         // Send our raw "test rom" to become an actual 'Rom' object and return
         Self::new(&output_raw)
+    }
+
+    pub fn generate_mapper(&self) -> Rc<RefCell<dyn Mapper>> {
+        println!("Generating mapper with mode: {}", self.mapper_id);
+        let mapper: Rc<RefCell<dyn Mapper>>  = match self.mapper_id {
+            0 => Rc::new(RefCell::new(Mapper0::new(
+                self.prg_rom.clone(),
+                self.chr_rom.clone(),
+                self.screen_mirroring,
+                false,
+            ))),
+            _ => panic!("Unsupported mapper selected {}", self.mapper_id)
+        };
+        mapper
     }
 }
 
@@ -148,7 +170,7 @@ pub mod test {
 
         assert_eq!(rom.chr_rom, vec!(2; 1 * CHR_ROM_PAGE_SIZE));
         assert_eq!(rom.prg_rom, vec!(1; 2 * PRG_ROM_PAGE_SIZE));
-        assert_eq!(rom.mapper, 3);
+        assert_eq!(rom.mapper_id, 3);
         assert_eq!(rom.screen_mirroring, Mirroring::VERTICAL);
     }
 
@@ -182,7 +204,7 @@ pub mod test {
 
         assert_eq!(rom.chr_rom, vec!(2; 1 * CHR_ROM_PAGE_SIZE));
         assert_eq!(rom.prg_rom, vec!(1; 2 * PRG_ROM_PAGE_SIZE));
-        assert_eq!(rom.mapper, 3);
+        assert_eq!(rom.mapper_id, 3);
         assert_eq!(rom.screen_mirroring, Mirroring::VERTICAL);
     }
 

@@ -7,7 +7,8 @@ mod frame;
 mod render;
 mod joypad;
 mod trace;
-
+mod mapper;
+mod mapping;
 use std::collections::HashMap;
 
 use crate::cpu::CPU;
@@ -43,7 +44,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240).unwrap();
 
     //load the game
-    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/smb.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/tetris.nes").unwrap();
     let rom = Rom::new(&bytes).unwrap();
 
     let mut frame = Frame::new(); // The current frame to be drawn by sdl2

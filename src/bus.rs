@@ -1,20 +1,28 @@
 
-use crate::{joypad, ppu::NesPPU, rom::{Mirroring, Rom}};
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{joypad, mapper::Mapper, ppu::NesPPU, rom::{Mirroring, Rom}};
 use crate::joypad::Joypad;
+use crate::mapping::mapper0::Mapper0;
 
 const RAM: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
 const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
-const ROM_MEM_START: u16 = 0x8000;
+const ROM_MEM_START: u16 = 0x6000;
 const ROM_MEM_END: u16 = 0xFFFF;
 
 // Generates a dummy rom for when a rom isn't needed
 fn test_rom_gen() -> Rom {
+    let prg_rom= vec![0xEA; 0x4000];
+    let chr_rom =  vec![0; 5];
+
+    let mapper = Mapper0::new(prg_rom.clone(), chr_rom.clone(), Mirroring::HORIZONTAL, false);
+
     Rom {
-        prg_rom: vec![0xEA; 0x4000], // NOPs
-        chr_rom: vec![],
-        mapper: 0,
+        prg_rom: prg_rom,
+        chr_rom: chr_rom,
+        mapper_id: 0,
         screen_mirroring: Mirroring::HORIZONTAL,
     }
 }
@@ -22,8 +30,8 @@ fn test_rom_gen() -> Rom {
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     joypad1: Joypad,
-    pub prg_rom: Vec<u8>,
     pub ppu: NesPPU,
+    pub mapper: Rc<RefCell<dyn Mapper>>,
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
@@ -33,13 +41,14 @@ impl<'a> Bus<'a> {
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
-        let ppu = NesPPU::new(rom.chr_rom.clone(), rom.screen_mirroring);
+        let mapper = rom.generate_mapper();
+        let ppu = NesPPU::new(mapper.clone());
 
         Bus {
             cpu_vram: [0; 2048],
             joypad1: Joypad::new(),
-            prg_rom: rom.prg_rom.clone(),
             ppu: ppu,
+            mapper: mapper,
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
@@ -81,35 +90,17 @@ impl<'a> Bus<'a> {
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
         let temp_rom = test_rom_gen();
-        let ppu = NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring);
+        let mapper = temp_rom.generate_mapper();
+        let ppu = NesPPU::new(mapper.clone());
 
         Bus {
             cpu_vram: [0; 2048],
             joypad1: Joypad::new(),
-            prg_rom: temp_rom.prg_rom.clone(),
             ppu: ppu,
+            mapper: temp_rom.generate_mapper(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
-    }
-
-    pub fn read_prg_rom(&self, mut addr: u16) -> u8 {
-        addr -= ROM_MEM_START;
-        // Remember 0x4000 == 16kB (a standard size for prg)
-        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
-            addr = addr % 0x4000;
-        }
-        self.prg_rom[addr as usize]
-    }
-
-    // Used only for test cases
-    fn write_prg_rom(&mut self, mut addr: u16, data: u8) {
-        addr -= ROM_MEM_START;
-        // Remember 0x4000 == 16kB (a standard size for prg)
-        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
-            addr = addr % 0x4000;
-        }
-        self.prg_rom[addr as usize] = data;
     }
 
     pub fn poll_nmi_status(&mut self) -> bool {
@@ -129,7 +120,6 @@ pub trait Mem {
     fn mem_read_u16(&mut self, addr: u16) -> u16;
     fn mem_peek_u16(&self, addr: u16) -> u16;
     fn mem_write_u16(&mut self, addr: u16, data: u16);
-    fn mem_write_test(&mut self, addr: u16, data: u8);
 }
 
 // 
@@ -153,7 +143,7 @@ impl Mem for Bus<'_> {
                 self.mem_read(mirrored_addr)
             }
             ROM_MEM_START ..= ROM_MEM_END => {
-                self.read_prg_rom(addr)
+                self.mapper.borrow().cpu_read(addr)
             }
             0x4016 => {
                 self.joypad1.read()
@@ -188,7 +178,7 @@ impl Mem for Bus<'_> {
                 self.mem_peek(mirrored_addr)
             }
             ROM_MEM_START ..= ROM_MEM_END => {
-                self.read_prg_rom(addr)
+                self.mapper.borrow().cpu_read(addr)
             }
             0x4016 => {
                 self.joypad1.peek()
@@ -198,7 +188,7 @@ impl Mem for Bus<'_> {
                 0
             }
             _ => {
-                println!("Attempted to read memory at unknown address 0x{:04X}", addr);
+                // println!("Attempted to read memory at unknown address 0x{:04X}", addr);
                 0
             }
         }
@@ -237,7 +227,7 @@ impl Mem for Bus<'_> {
                 self.mem_write(mirrored_addr, data);
             }
             ROM_MEM_START ..= ROM_MEM_END => {
-                panic!("Attempted to write to Cartridge ROM space address: 0x{:04X}", addr)
+                self.mapper.borrow_mut().cpu_write(addr, data);
             }
             0x4000 | 0x4001 | 0x4002 | 0x4003 | 0x4006 | 0x4005 | 0x4007 | 0x4004 => {
                 // APU IGNORE
@@ -260,15 +250,10 @@ impl Mem for Bus<'_> {
                 // this is controller 2 which is not implemented yet
             }
             _ => {
-                println!("Attempted to write memory at unknown address 0x{:04X}", addr);
+                // println!("Attempted to write memory at unknown address 0x{:04X}", addr);
                 // println!("^^ Above message is likely due to the lack of APU")
             }
         }
-    }
-
-    // Allows writing to cartridge ROM space (ONLY USED FOR TEST CASES)
-    fn mem_write_test(&mut self, addr: u16, data: u8) {
-        self.write_prg_rom(addr, data);
     }
 
     fn mem_write_u16(&mut self, addr: u16, data: u16) {

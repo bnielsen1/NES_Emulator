@@ -1,5 +1,7 @@
 
 
+use std::vec;
+
 use crate::ppu::NesPPU;
 use crate::frame::Frame;
 use crate::palette::{self, SYSTEM_PALLETE};
@@ -36,7 +38,12 @@ fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_po
         let y_offset: usize = i / 32;
 
         let palette = bg_pallette(ppu, attribute_table, x_offset, y_offset);
-        let tile =  &ppu.chr_rom[(bank + (tile_id * 16)) as usize..=(bank + (tile_id * 16) + 15) as usize];
+        
+        let mut tile: Vec<u8> = vec![];
+        let index_range = (bank + (tile_id * 16)) as usize..=(bank + (tile_id * 16) + 15) as usize;
+        for i in index_range {
+            tile.push(ppu.mapper.borrow().read_chr_rom(i));
+        }
 
         for y in 0..=7 {
             let mut lower = tile[y];
@@ -74,7 +81,7 @@ fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_po
 pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     let scroll = ppu.scroll.read();
 
-    let (main_nametable, other_nametable) = match (&ppu.mirroring, ppu.ctrl.read_nametable()) {
+    let (main_nametable, other_nametable) = match (&ppu.mapper.borrow().get_mirroring(), ppu.ctrl.read_nametable()) {
         (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
             (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
         }
@@ -147,8 +154,13 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         };
 
         // load 
-        let tile =  &ppu.chr_rom[(bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize];
 
+        
+        let mut tile: Vec<u8> = vec![];
+        let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
+        for i in index_range {
+            tile.push(ppu.mapper.borrow().read_chr_rom(i));
+        }
         for y in 0..=7usize {
             let mut lower = tile[y];
             let mut upper = tile[y+8];

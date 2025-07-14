@@ -1,6 +1,9 @@
 
 use crate::rom::Mirroring;
 use bitflags::bitflags;
+use crate::mapper::Mapper;
+use crate::rom::Rom;
+use std::{cell::RefCell, rc::Rc};
 
 // PPU Register -> Reg Title translation
 // NOTE: These memory addresses are mapped to the CPU
@@ -11,7 +14,7 @@ Data == 0x2007 == ^^^^^
 */
 
 pub struct NesPPU {
-    pub chr_rom: Vec<u8>,
+    pub mapper: Rc<RefCell<dyn Mapper>>,
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
     pub oam_data: [u8; 256],
@@ -19,7 +22,6 @@ pub struct NesPPU {
     oam_addr: u8, // OAM Address written by 0x2003 and used by 0x2004
     pub ppu_status: u8,
 
-    pub mirroring: Mirroring,
     pub cycles: usize,
     pub scanline: u16,
     pub trigger_nmi: bool, // Variable cpu reads to see if it should be interrupted
@@ -34,9 +36,9 @@ pub struct NesPPU {
 impl NesPPU {
 
     pub fn new_empty_rom() -> Self {
+        let test_mapper = Rom::new_test(vec![0; 5]).unwrap().generate_mapper();
         NesPPU {
-            chr_rom: vec![0; 2048],
-            mirroring: Mirroring::HORIZONTAL,
+            mapper: test_mapper,
             internal_data_buf: 0,
             oam_addr: 0,
             ppu_status: 0b0000_0000,
@@ -54,11 +56,10 @@ impl NesPPU {
         }
     }
 
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
-        println!("CHR ROM when creating ppu size: {}", chr_rom.len());
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+        // println!("CHR ROM when creating ppu size: {}", chr_rom.len());
         NesPPU {
-            chr_rom: chr_rom,
-            mirroring: mirroring,
+            mapper: mapper,
             internal_data_buf: 0,
             oam_addr: 0,
             ppu_status: 0b0000_0000,
@@ -161,7 +162,7 @@ impl NesPPU {
         match addr {
             0..=0x1FFF => {
                 let result = self.internal_data_buf;
-                self.internal_data_buf = self.chr_rom[addr as usize];
+                self.internal_data_buf = self.mapper.borrow().ppu_read(addr);
                 result
             },
             0x2000..=0x2FFF => {
@@ -204,7 +205,7 @@ impl NesPPU {
 
         match addr {
             0..=0x1FFF => {
-                panic!("Cannot write to allocated CHR ROM space addr: 0x{:04X}", addr)
+                self.mapper.borrow_mut().ppu_write(addr, data);
             },
             0x2000..=0x2FFF => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = data
@@ -278,7 +279,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10111111111111; // Mirrors down 3000-3EFF to regular ranges
         let vram_index = mirrored_vram - 0x2000; // Screens can start at 0x2000 so reduct to start from 0
         let name_table = vram_index / 0x400; // Create an index for each mirrored chunk
-        match (&self.mirroring, name_table) {
+        match (&self.mapper.borrow_mut().get_mirroring(), name_table) {
             (Mirroring::VERTICAL, 2) | (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) | (Mirroring::HORIZONTAL, 1) => vram_index - 0x400,
             (Mirroring::HORIZONTAL, 3) => vram_index - 0x800,
@@ -718,7 +719,8 @@ pub mod test {
     //   [0x2800 a ] [0x2C00 b ]
     #[test]
     fn test_vram_vertical_mirror() {
-        let mut ppu = NesPPU::new(vec![0; 2048], Mirroring::VERTICAL);
+        let test_mapper = Rom::new_test(vec![0; 5]).unwrap().generate_mapper();
+        let mut ppu = NesPPU::new(test_mapper);
 
         ppu.write_to_ppu_addr(0x20);
         ppu.write_to_ppu_addr(0x05);
