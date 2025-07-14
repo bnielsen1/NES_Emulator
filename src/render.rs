@@ -53,12 +53,18 @@ fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_po
                     3 => SYSTEM_PALLETE[palette[3] as usize],
                     _ => panic!("Somehow got invalid sprite color id???")
                 };
+
+                let trans = if pal_id == 0 {
+                    true
+                } else {
+                    false
+                };
                 
                 let pixel_x = (x_offset * 8) + x;
                 let pixel_y = (y_offset * 8) + y;
 
                 if (pixel_x >= view_port.x1) && (pixel_x < view_port.x2) && (pixel_y >= view_port.y1) && (pixel_y < view_port.y2) {
-                    frame.set_pixel(((pixel_x as isize) + shift_x) as usize, ((pixel_y as isize) + shift_y) as usize, color);
+                    frame.set_pixel(trans, ((pixel_x as isize) + shift_x) as usize, ((pixel_y as isize) + shift_y) as usize, color);
                 }
             }
         }
@@ -123,6 +129,13 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             false
         };
 
+        // true = draw above bkground
+        let tile_prio = if (tile_attr >> 5) & 1 == 1 {
+            false
+        } else {
+            true
+        };
+
         let palette_index = tile_attr & 0b11;
         let sprite_palette = sprite_palette(ppu, palette_index);
 
@@ -151,11 +164,18 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
                     3 => SYSTEM_PALLETE[sprite_palette[3] as usize],
                     _ => panic!("Somehow got invalid sprite color id???")
                 };
+
+                let trans = if pal_id == 0 {
+                    true
+                } else {
+                    false
+                };
+
                 match (flip_horizontal, flip_vertical) {
-                    (false, false) => frame.set_pixel(tile_x + x,tile_y + y, color),
-                    (true, false) => frame.set_pixel(tile_x + 7 -x,tile_y + y, color),
-                    (false, true) => frame.set_pixel(tile_x + x,tile_y + 7 - y, color),
-                    (true, true) => frame.set_pixel(tile_x + 7 - x,tile_y + 7 - y, color),
+                    (false, false) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + y, color),
+                    (true, false) => frame.check_and_set(trans, tile_prio, tile_x + 7 -x,tile_y + y, color),
+                    (false, true) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + 7 - y, color),
+                    (true, true) => frame.check_and_set(trans, tile_prio, tile_x + 7 - x,tile_y + 7 - y, color),
                 }
             }
         }
