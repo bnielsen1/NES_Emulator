@@ -28,7 +28,7 @@ impl Mapper0 {
     }
 }
 
-// https://www.nesdev.org/wiki/NROM
+// https://www.nesdev.org/wiki/NROM for details on mapping mode 0
 impl Mapper for Mapper0 {
     // Default implementations mostly for test cases
     fn get_prg_rom(&self) -> Vec<u8> {

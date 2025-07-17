@@ -139,6 +139,7 @@ impl Mem for Bus<'_> {
             0x2007 => self.ppu.read_data(),
             0x2008 ..= PPU_REGISTERS_MIRRORS_END => {
                 // Recall function with address properly mirrored
+                // println!("PPU MIRROR");
                 let mirrored_addr = addr &0b0010000_00000111;
                 self.mem_read(mirrored_addr)
             }

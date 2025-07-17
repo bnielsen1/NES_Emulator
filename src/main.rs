@@ -44,7 +44,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240).unwrap();
 
     //load the game
-    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/tetris.nes").unwrap();
+    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/balloonfight.nes").unwrap();
     let rom = Rom::new(&bytes).unwrap();
 
     let mut frame = Frame::new(); // The current frame to be drawn by sdl2
@@ -59,8 +59,6 @@ fn main() {
     key_map.insert(Keycode::Return, joypad::JoypadButton::START);
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
-
-    let joypad1: Joypad = Joypad::new();
 
     // begin game cycle
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad1: &mut Joypad| {
