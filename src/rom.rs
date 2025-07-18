@@ -1,4 +1,4 @@
-use crate::mapper::Mapper;
+use crate::{mapper::Mapper, mapping::mapper1::Mapper1};
 use crate::mapping::mapper0::Mapper0;
 
 use std::{cell::RefCell, rc::Rc};
@@ -19,6 +19,7 @@ pub struct Rom {
     pub chr_rom: Vec<u8>,
     pub mapper_id: u8,
     pub screen_mirroring: Mirroring,
+    pub is_chr_ram: bool
 }
 
 impl Rom {
@@ -46,6 +47,8 @@ impl Rom {
         let prg_rom_size = raw[4] as usize * PRG_ROM_PAGE_SIZE;
         let chr_rom_size = raw[5] as usize * CHR_ROM_PAGE_SIZE;
 
+
+
         let skip_trainer = raw[6] & 0b100 != 0;
 
         let mut prg_rom_start = 16;
@@ -57,12 +60,20 @@ impl Rom {
         println!("PRG ROM INFORMATION: start: {} size: {}", prg_rom_start, prg_rom_size);
         println!("CHR ROM INFORMATION: start: {} size: {}", chr_rom_start, chr_rom_size);
 
+        let mut is_chr_ram: bool = false;
+
         let prg_rom = raw[prg_rom_start..(prg_rom_start+prg_rom_size)].to_vec();
-        let chr_rom = raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec();
+        let chr_rom = if chr_rom_size == 0 {
+            is_chr_ram = true;
+            vec![0; 8192]
+        } else {
+            raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec()
+        };
 
         Ok(Rom {
-            prg_rom: raw[prg_rom_start..(prg_rom_start+prg_rom_size)].to_vec(),
-            chr_rom: raw[chr_rom_start..(chr_rom_start+chr_rom_size)].to_vec(),
+            prg_rom: prg_rom,
+            chr_rom: chr_rom,
+            is_chr_ram: is_chr_ram,
             mapper_id,
             screen_mirroring
         })
@@ -98,7 +109,13 @@ impl Rom {
                 self.prg_rom.clone(),
                 self.chr_rom.clone(),
                 self.screen_mirroring,
-                false,
+                self.is_chr_ram,
+            ))),
+            1 => Rc::new(RefCell::new(Mapper1::new(
+                self.prg_rom.clone(),
+                self.chr_rom.clone(),
+                self.screen_mirroring,
+                self.is_chr_ram
             ))),
             _ => panic!("Unsupported mapper selected {}", self.mapper_id)
         };

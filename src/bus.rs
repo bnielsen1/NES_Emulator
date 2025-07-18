@@ -22,6 +22,7 @@ fn test_rom_gen() -> Rom {
     Rom {
         prg_rom: prg_rom,
         chr_rom: chr_rom,
+        is_chr_ram: false,
         mapper_id: 0,
         screen_mirroring: Mirroring::HORIZONTAL,
     }
