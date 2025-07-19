@@ -26,7 +26,7 @@ impl Rect {
 }
 
 fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_port: Rect, shift_x: isize, shift_y: isize) {
-    let bank = ppu.ctrl.get_background_bank_val();
+    let mut bank = ppu.ctrl.get_background_bank_val();
 
     let attribute_table = &name_table[0x3C0..0x400]; // Stores palette table information from the name table/screen ram
 
@@ -83,13 +83,23 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
     let (main_nametable, other_nametable) = match (&ppu.mapper.borrow().get_mirroring(), ppu.ctrl.read_nametable()) {
         (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
+            // println!("Base == A | Second == B");
             (&ppu.vram[0..0x400], &ppu.vram[0x400..0x800])
         }
         (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) | (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
-            ( &ppu.vram[0x400..0x800], &ppu.vram[0..0x400])
+            // println!("Base == A | Second == B");
+            (&ppu.vram[0x400..0x800], &ppu.vram[0..0x400])
+        }
+        (Mirroring::SINGLE_LOWER, _) => {
+            (&ppu.vram[0..0x400], &ppu.vram[0..0x400])
+        }
+        (Mirroring::SINGLE_UPPER, _) => {
+            (&ppu.vram[0x400..0x800], &ppu.vram[0x400..0x800])
         }
         (_,_) => panic!("Unsupported mirroring type?")
     };
+
+    // println!("Scroll x == {} | Scroll y == {}", scroll.0, scroll.1);
 
     // Render main screen
     render_name_table(ppu, frame,
@@ -101,6 +111,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
     // Render other screen
     if scroll.0 > 0 {
+        // println!("are we scroll 0ing?");
         render_name_table(ppu, frame,
             other_nametable,
             Rect::new(0, 0, scroll.0 as usize, 240),
@@ -108,6 +119,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             0
         );
     } else if scroll.1 > 0 {
+        // println!("are we scroll 1ing");
         render_name_table(ppu, frame,
             other_nametable,
             Rect::new(0, 0, 256, scroll.1 as usize),
@@ -124,71 +136,129 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         let tile_attr = ppu.oam_data[i+2];
         let tile_x: usize = ppu.oam_data[i+3] as usize;
 
-        let flip_vertical = if (tile_attr >> 7) & 1 == 1 {
-            true
+        if ppu.ctrl.is_sprite_size() { // If 8x16
+            render_8x16_sprite(ppu, frame, tile_y, tile_index, tile_attr, tile_x);
         } else {
-            false
-        };
-
-        let flip_horizontal = if (tile_attr >> 6) & 1 == 1 {
-            true
-        } else {
-            false
-        };
-
-        // true = draw above bkground
-        let tile_prio = if (tile_attr >> 5) & 1 == 1 {
-            false
-        } else {
-            true
-        };
-
-        let palette_index = tile_attr & 0b11;
-        let sprite_palette = sprite_palette(ppu, palette_index);
-
-        // Select bank based off ctrl register
-        let bank = if ppu.ctrl.is_sprite_pattern_addr() {
-            0x1000
-        } else {
-            0x0000
-        };
-
-        // load 
-
-        
-        let mut tile: Vec<u8> = vec![];
-        let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
-        for i in index_range {
-            tile.push(ppu.mapper.borrow().read_chr_rom(i));
+            render_8x8_sprite(ppu, frame, tile_y, tile_index, tile_attr, tile_x);
         }
-        for y in 0..=7usize {
-            let mut lower = tile[y];
-            let mut upper = tile[y+8];
+    }
+}
 
-            'outer: for x in (0..=7usize).rev() {
-                let pal_id = (1 & upper) << 1 | (1 & lower);
-                lower = lower >> 1;
-                upper = upper >> 1;
-                let color = match pal_id {
-                    0 => continue 'outer,
-                    1 => SYSTEM_PALLETE[sprite_palette[1] as usize],
-                    2 => SYSTEM_PALLETE[sprite_palette[2] as usize],
-                    3 => SYSTEM_PALLETE[sprite_palette[3] as usize],
-                    _ => panic!("Somehow got invalid sprite color id???")
-                };
+fn render_8x8_sprite(ppu: &NesPPU, frame: &mut Frame, tile_y: usize, tile_index: u16, tile_attr: u8, tile_x: usize) {
+    let flip_vertical = if (tile_attr >> 7) & 1 == 1 {
+        true
+    } else {
+        false
+    };
 
-                let trans = if pal_id == 0 {
-                    true
-                } else {
-                    false
-                };
+    let flip_horizontal = if (tile_attr >> 6) & 1 == 1 {
+        true
+    } else {
+        false
+    };
 
-                match (flip_horizontal, flip_vertical) {
-                    (false, false) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + y, color),
-                    (true, false) => frame.check_and_set(trans, tile_prio, tile_x + 7 -x,tile_y + y, color),
-                    (false, true) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + 7 - y, color),
-                    (true, true) => frame.check_and_set(trans, tile_prio, tile_x + 7 - x,tile_y + 7 - y, color),
-                }
+    // true = draw above bkground
+    let tile_prio = if (tile_attr >> 5) & 1 == 1 {
+        false
+    } else {
+        true
+    };
+
+    let palette_index = tile_attr & 0b11;
+    let sprite_palette = sprite_palette(ppu, palette_index);
+
+    // Select bank based off ctrl register
+    let mut bank = if ppu.ctrl.is_sprite_pattern_addr() {
+        0x1000
+    } else {
+        0x0000
+    };
+    
+    let mut tile: Vec<u8> = vec![];
+    let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
+    for i in index_range {
+        tile.push(ppu.mapper.borrow().read_chr_rom(i));
+    }
+    render_sprite_tile(&tile, tile_x, tile_y, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
+}
+
+fn render_8x16_sprite(ppu: &NesPPU, frame: &mut Frame, tile_y: usize, tile_index: u16, tile_attr: u8, tile_x: usize) {
+    let flip_vertical = if (tile_attr >> 7) & 1 == 1 {
+        true
+    } else {
+        false
+    };
+
+    let flip_horizontal = if (tile_attr >> 6) & 1 == 1 {
+        true
+    } else {
+        false
+    };
+
+    // true = draw above bkground
+    let tile_prio = if (tile_attr >> 5) & 1 == 1 {
+        false
+    } else {
+        true
+    };
+
+    let palette_index = tile_attr & 0b11;
+    let sprite_palette = sprite_palette(ppu, palette_index);
+
+    // Select bank based off last bit of tile index
+    let bank = if (tile_index &0b0000_0001) == 1 {
+        0x1000
+    } else {
+        0x0000
+    };
+
+    let mut tile1: Vec<u8> = vec![];
+    let mut tile2: Vec<u8> = vec![];
+    let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
+    for i in index_range {
+        tile1.push(ppu.mapper.borrow().read_chr_rom(i));
+        tile2.push(ppu.mapper.borrow().read_chr_rom(i + 16));
+    }
+
+    if !flip_vertical {
+        render_sprite_tile(&tile1, tile_x, tile_y, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
+        render_sprite_tile(&tile2, tile_x, tile_y + 8, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
+    } else {
+        render_sprite_tile(&tile2, tile_x, tile_y, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
+        render_sprite_tile(&tile1, tile_x, tile_y + 8, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
+    }
+    
+    
+}
+
+fn render_sprite_tile(tile: &Vec<u8>, tile_x: usize, tile_y: usize, frame: &mut Frame, sprite_palette: &[u8; 4], tile_prio: bool, flip_vert: bool, flip_hori: bool) {
+    for y in 0..=7usize {
+        let mut lower = tile[y];
+        let mut upper = tile[y+8];
+
+        'outer: for x in (0..=7usize).rev() {
+            let pal_id = (1 & upper) << 1 | (1 & lower);
+            lower = lower >> 1;
+            upper = upper >> 1;
+            let color = match pal_id {
+                0 => continue 'outer,
+                1 => SYSTEM_PALLETE[sprite_palette[1] as usize],
+                2 => SYSTEM_PALLETE[sprite_palette[2] as usize],
+                3 => SYSTEM_PALLETE[sprite_palette[3] as usize],
+                _ => panic!("Somehow got invalid sprite color id???")
+            };
+
+            let trans = if pal_id == 0 {
+                true
+            } else {
+                false
+            };
+
+            match (flip_hori, flip_vert) {
+                (false, false) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + y, color),
+                (true, false) => frame.check_and_set(trans, tile_prio, tile_x + 7 -x,tile_y + y, color),
+                (false, true) => frame.check_and_set(trans, tile_prio, tile_x + x,tile_y + 7 - y, color),
+                (true, true) => frame.check_and_set(trans, tile_prio, tile_x + 7 - x,tile_y + 7 - y, color),
             }
         }
     }

@@ -279,13 +279,15 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10111111111111; // Mirrors down 3000-3EFF to regular ranges
         let vram_index = mirrored_vram - 0x2000; // Screens can start at 0x2000 so reduct to start from 0
         let name_table = vram_index / 0x400; // Create an index for each mirrored chunk
-        match (&self.mapper.borrow_mut().get_mirroring(), name_table) {
+        match (&self.mapper.borrow().get_mirroring(), name_table) {
             (Mirroring::VERTICAL, 2) | (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) | (Mirroring::HORIZONTAL, 1) => vram_index - 0x400,
             (Mirroring::HORIZONTAL, 3) => vram_index - 0x800,
+            (Mirroring::SINGLE_LOWER, 1) | (Mirroring::SINGLE_UPPER, 2) => vram_index - 0x400,
+            (Mirroring::SINGLE_LOWER, 2) | (Mirroring::SINGLE_UPPER, 3) => vram_index - 0x800,
+            (Mirroring::SINGLE_LOWER, 3) => vram_index - 0xC00,
             _ => vram_index,
         }
-
     }
 }
 

@@ -155,7 +155,7 @@ impl Mem for Bus<'_> {
                 0
             }
             _ => {
-                println!("Attempted to read memory at unknown address 0x{:04X}", addr);
+                // println!("Attempted to read memory at unknown address 0x{:04X}", addr);
                 0
             }
         }

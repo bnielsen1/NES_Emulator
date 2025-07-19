@@ -32,7 +32,7 @@ pub struct Mapper1 {
 
 impl Mapper1 {
     pub fn new(prg_rom: Vec<u8>, chr_rom: Vec<u8>, mirroring: Mirroring, chr_is_ram: bool) -> Self {
-        Mapper1 {
+        let mut mapper = Mapper1 {
             prg_rom: prg_rom,
             prg_ram: vec![0; 0x2000],
             chr_rom: chr_rom,
@@ -56,7 +56,11 @@ impl Mapper1 {
 
             mirroring: mirroring,
             chr_is_ram: chr_is_ram
-        }
+        };
+
+        mapper.update_banks();
+        mapper
+        
     }
 }
 
@@ -89,17 +93,15 @@ impl Mapper1 {
         self.prg_rom_bank_mode = (self.control >> 2) & 0b11;
         self.chr_rom_bank_mode = (self.control >> 4) & 0b1;
 
-        // Decide mirroring might have issues
-        // Best fix could be to try is adding 2 modes to Mirroring enum for 0 and 1 cases
         let nametable_bits = self.control & 0b11;
         self.mirroring = match nametable_bits {
             0 => {
                 // single screen first bank
-                Mirroring::VERTICAL
+                Mirroring::SINGLE_LOWER
             }
             1 => {
                 // single screen second bank
-                panic!("I dont think we can handle single screen second bank");
+                Mirroring::SINGLE_UPPER
             }
             2 => {
                 Mirroring::VERTICAL
@@ -138,7 +140,7 @@ impl Mapper1 {
         match self.chr_rom_bank_mode {
             0 => {
                 // Set first bank and second bank based off first (8KB at once)
-                self.chr_bank_0_offset = ((self.chr_bank_0 as usize) & 0b0001_1111) * single_chr_bank_size;
+                self.chr_bank_0_offset = ((self.chr_bank_0 as usize) & 0b0001_1110) * single_chr_bank_size;
                 self.chr_bank_1_offset = self.chr_bank_0_offset + 0x1000;
             },
             1 => {
@@ -148,6 +150,7 @@ impl Mapper1 {
             },
             _ => panic!("Invalid chr rom bank setting in mapping mode 1 control bit")
         }
+        // self.chr_bank_0_offset = 0;
 
     }
 }
@@ -188,6 +191,7 @@ impl Mapper for Mapper1 {
             }
             0x8000..=0xBFFF => {
                 addr -= 0x8000;
+                // println!("prg_bank_offset_first 0x:{:04X}", self.prg_bank_offset_first);
                 self.prg_rom[self.prg_bank_offset_first + addr as usize]
             }
             0xC000..=0xFFFF => {
@@ -209,6 +213,13 @@ impl Mapper for Mapper1 {
                 return
             },
             0x8000..=0xFFFF => {
+                println!("Control 0b{:08b}", self.control);
+                println!("Shift reg 0b{:08b}", self.shift_register);
+                println!("chr_bank_0 0b{:08b}", self.chr_bank_0);
+                println!("chr_bank_1 0b{:08b}", self.chr_bank_1);
+                println!("chr_bank_0 offset 0X{:04X}", self.chr_bank_0_offset);
+                println!("chr_bank_1 offset 0X{:04X}", self.chr_bank_1_offset);
+                println!("Writing to addr: 0x{:04} with data 0b{:08b}", addr, data);
                 // println!("Performing CPU write on addr: 0x{:04X}", addr);
                 // Reset shift when bit 7 is on
                 if data & 0x80 != 0 {
@@ -236,6 +247,8 @@ impl Mapper for Mapper1 {
                             self.chr_bank_0 = self.shift_register & 0b0001_1111;
                         }
                         2 => {
+                            // println!("updated chr_bank 1 with new value from shift 0b{:08b}", self.shift_register);
+
                             self.chr_bank_1 = self.shift_register & 0b0001_1111;
                         }
                         3 => {
@@ -254,12 +267,13 @@ impl Mapper for Mapper1 {
         }
     }
 
-    fn ppu_read(&self, addr: u16) -> u8 {
+    fn ppu_read(&self, mut addr: u16) -> u8 {
         match addr {
             0x0000..=0x0FFF => {
                 return self.chr_rom[self.chr_bank_0_offset + addr as usize]
             }
             0x1000..=0x1FFF => {
+                addr -= 0x1000;
                 return self.chr_rom[self.chr_bank_1_offset + addr as usize]
             }
             _ => panic!("attempted to read from a ppu addr >= 0x2000 in mapper 1")
