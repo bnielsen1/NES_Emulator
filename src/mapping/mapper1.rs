@@ -213,13 +213,12 @@ impl Mapper for Mapper1 {
                 return
             },
             0x8000..=0xFFFF => {
-                println!("Control 0b{:08b}", self.control);
-                println!("Shift reg 0b{:08b}", self.shift_register);
-                println!("chr_bank_0 0b{:08b}", self.chr_bank_0);
-                println!("chr_bank_1 0b{:08b}", self.chr_bank_1);
-                println!("chr_bank_0 offset 0X{:04X}", self.chr_bank_0_offset);
-                println!("chr_bank_1 offset 0X{:04X}", self.chr_bank_1_offset);
-                println!("Writing to addr: 0x{:04} with data 0b{:08b}", addr, data);
+                // println!("Control 0b{:08b}", self.control);
+                // println!("chr_bank_0 0b{:08b}", self.chr_bank_0);
+                // println!("chr_bank_1 0b{:08b}", self.chr_bank_1);
+                // println!("chr_bank_0 offset 0X{:04X}", self.chr_bank_0_offset);
+                // println!("chr_bank_1 offset 0X{:04X}", self.chr_bank_1_offset);
+                // println!("Writing to addr: 0x{:04X} with data 0b{:08b}", addr, data);
                 // println!("Performing CPU write on addr: 0x{:04X}", addr);
                 // Reset shift when bit 7 is on
                 if data & 0x80 != 0 {
@@ -236,9 +235,13 @@ impl Mapper for Mapper1 {
                 self.shift_register |= (data & 0b0000_0001) << 4;
                 self.shift_count += 1;
 
+                // println!("shift count {}", self.shift_count);
+                // println!("Shift reg 0b{:08b}", self.shift_register);
+
                 // handle 5 shift (shift register filled)
                 if self.shift_count == 5 {
                     let register_index = (addr - 0x8000) / 0x2000;
+                    // println!("reg index: {}", register_index);
                     match register_index {
                         0 => {
                             self.control = self.shift_register & 0b0001_1111;

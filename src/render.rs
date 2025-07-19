@@ -42,7 +42,7 @@ fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_po
         let mut tile: Vec<u8> = vec![];
         let index_range = (bank + (tile_id * 16)) as usize..=(bank + (tile_id * 16) + 15) as usize;
         for i in index_range {
-            tile.push(ppu.mapper.borrow().read_chr_rom(i));
+            tile.push(ppu.mapper.borrow().ppu_read(i as u16));
         }
 
         for y in 0..=7 {
@@ -177,7 +177,7 @@ fn render_8x8_sprite(ppu: &NesPPU, frame: &mut Frame, tile_y: usize, tile_index:
     let mut tile: Vec<u8> = vec![];
     let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
     for i in index_range {
-        tile.push(ppu.mapper.borrow().read_chr_rom(i));
+        tile.push(ppu.mapper.borrow().ppu_read(i as u16));
     }
     render_sprite_tile(&tile, tile_x, tile_y, frame, &sprite_palette, tile_prio, flip_vertical, flip_horizontal);
 }
@@ -216,8 +216,8 @@ fn render_8x16_sprite(ppu: &NesPPU, frame: &mut Frame, tile_y: usize, tile_index
     let mut tile2: Vec<u8> = vec![];
     let index_range = (bank + (tile_index * 16)) as usize..=(bank + (tile_index * 16) + 15) as usize;
     for i in index_range {
-        tile1.push(ppu.mapper.borrow().read_chr_rom(i));
-        tile2.push(ppu.mapper.borrow().read_chr_rom(i + 16));
+        tile1.push(ppu.mapper.borrow().ppu_read(i as u16));
+        tile2.push(ppu.mapper.borrow().ppu_read((i + 16) as u16));
     }
 
     if !flip_vertical {
