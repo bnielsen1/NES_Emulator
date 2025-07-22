@@ -34,7 +34,7 @@ fn main() {
     // Process arguments
     let mut i = 1;
     while i < args.len() {
-        if args[i] == "rom" {
+        if args[i] == "-rom" {
             if rom_path == "".to_string() {
                 i += 1;
                 rom_path = args[i].clone();
@@ -42,7 +42,7 @@ fn main() {
             } else {
                 panic!("Cannot set rom path multiple when providing arguments")
             }
-        } else if args[i] == "debug" {
+        } else if args[i] == "-debug" {
             debug = true;
             i += 1;
         } else {
