@@ -10,6 +10,7 @@ mod trace;
 mod mapper;
 mod mapping;
 use std::collections::HashMap;
+use std::env;
 
 use crate::cpu::CPU;
 use crate::bus::Bus;
@@ -18,15 +19,44 @@ use crate::rom::Rom;
 use crate::frame::Frame;
 use crate::ppu::NesPPU;
 use crate::trace::trace;
-
-use rand::Rng;
 use sdl2::event::Event;
-use sdl2::EventPump;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 
+
+
 fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let mut rom_path: String = "".to_string();
+    let mut debug: bool = false;
+
+    // Process arguments
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "rom" {
+            if rom_path == "".to_string() {
+                i += 1;
+                rom_path = args[i].clone();
+                i += 1;
+            } else {
+                panic!("Cannot set rom path multiple when providing arguments")
+            }
+        } else if args[i] == "debug" {
+            debug = true;
+            i += 1;
+        } else {
+            panic!("Invalid argument passed: {}", args[i])
+        }
+    }
+
+    if rom_path == "".to_string() {
+        panic!("
+            No rom path given!!! Please provide a rom path like so:\n
+            \"cargo run rom PATH_TO_ROM\"
+        ")
+    }
+
     // init SDL2
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -44,7 +74,9 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240).unwrap();
 
     //load the game
-    let bytes: Vec<u8> = std::fs::read("/home/briyoda/Downloads/zelda1.nes").unwrap();
+    println!("Attempting to load rom at path: {}", rom_path);
+    let bytes: Vec<u8> = std::fs::read(rom_path).unwrap();
+    println!("Rom found successfully, preparing for emulation...");
     let rom = Rom::new(&bytes).unwrap();
 
     let mut frame = Frame::new(); // The current frame to be drawn by sdl2
@@ -97,11 +129,19 @@ fn main() {
 
     let mut cpu = CPU::new(bus);
 
+    let mut callback_fn: Box<dyn FnMut(&mut CPU)> = if debug {
+        Box::new(|cpu: &mut CPU| {
+            println!("{}", trace(cpu));
+            println!("MORE PPU DATA: VBLANK: {} CTRL: {:08b}, STATUS: {:08b}", cpu.bus.ppu.trigger_nmi, cpu.bus.ppu.ctrl.bits(), cpu.bus.ppu.peek_status());
+        })
+    } else {
+        Box::new(|_: &mut CPU| {
+
+        })
+    };
+
     cpu.reset();
-    cpu.run_with_callback(move |cpu| {
-        // println!("{}", trace(cpu));
-        // println!("MORE PPU DATA: VBLANK: {} CTRL: {:08b}, STATUS: {:08b}", cpu.bus.ppu.trigger_nmi, cpu.bus.ppu.ctrl.bits(), cpu.bus.ppu.peek_status());
-    });
+    cpu.run_with_callback(move |cpu| callback_fn.as_mut()(cpu));
 
 
 }

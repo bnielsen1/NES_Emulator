@@ -1,23 +1,19 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{joypad, mapper::Mapper, ppu::NesPPU, rom::{Mirroring, Rom}};
+use crate::{mapper::Mapper, ppu::NesPPU, rom::{Mirroring, Rom}};
 use crate::joypad::Joypad;
-use crate::mapping::mapper0::Mapper0;
 
 const RAM: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
-const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
 const ROM_MEM_START: u16 = 0x6000;
 const ROM_MEM_END: u16 = 0xFFFF;
 
 // Generates a dummy rom for when a rom isn't needed
-fn test_rom_gen() -> Rom {
+fn _test_rom_gen() -> Rom {
     let prg_rom= vec![0xEA; 0x4000];
     let chr_rom =  vec![0; 5];
-
-    let mapper = Mapper0::new(prg_rom.clone(), chr_rom.clone(), Mirroring::HORIZONTAL, false);
 
     Rom {
         prg_rom: prg_rom,
@@ -71,36 +67,6 @@ impl<'a> Bus<'a> {
         // Call the gameloop function which will handle rendering other possible inputs
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
-        }
-    }
-
-    // Call instead of new if you don't need to use a ROM
-    // pub fn new_fake_rom() -> Self {
-    //     let temp_rom = test_rom_gen();
-
-    //     Bus {
-    //         cpu_vram: [0; 2048],
-    //         prg_rom: temp_rom.prg_rom.clone(),
-    //         ppu: NesPPU::new(temp_rom.chr_rom.clone(), temp_rom.screen_mirroring),
-    //         cycles: 0,
-    //     }
-    // }
-
-    pub fn new_fake_rom<'call, F>(gameloop_callback: F) -> Bus<'call>
-    where
-        F: FnMut(&NesPPU, &mut Joypad) + 'call,
-    {
-        let temp_rom = test_rom_gen();
-        let mapper = temp_rom.generate_mapper();
-        let ppu = NesPPU::new(mapper.clone());
-
-        Bus {
-            cpu_vram: [0; 2048],
-            joypad1: Joypad::new(),
-            ppu: ppu,
-            mapper: temp_rom.generate_mapper(),
-            cycles: 0,
-            gameloop_callback: Box::from(gameloop_callback),
         }
     }
 
@@ -270,11 +236,11 @@ impl Mem for Bus<'_> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::rom::{Rom, test};
+    use crate::rom::{test};
 
     #[test]
     fn test_mem_read_write_to_ram() {
-        let mut bus = Bus::new(test::test_rom(), |ppu, joypad1| {});
+        let mut bus = Bus::new(test::_test_rom(), |_ppu, _joypad1| {});
         bus.mem_write(0x01, 0x55);
         assert_eq!(bus.mem_read(0x01), 0x55);
     }

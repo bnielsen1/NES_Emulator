@@ -11,9 +11,9 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 pub enum Mirroring {
     VERTICAL,
     HORIZONTAL,
-    SINGLE_LOWER,
-    SINGLE_UPPER,
-    FOUR_SCREEN
+    SINGLELOWER,
+    SINGLEUPPER,
+    FOURSCREEN
 }
 
 pub struct Rom {
@@ -41,7 +41,7 @@ impl Rom {
         let four_screen = raw[6] & 0b1000 != 0;
         let vertical_mirroring = raw[6] & 0b1 != 0;
         let screen_mirroring = match (four_screen, vertical_mirroring) {
-            (true, _) => Mirroring::FOUR_SCREEN,
+            (true, _) => Mirroring::FOURSCREEN,
             (false, true) => Mirroring::VERTICAL,
             (false, false) => Mirroring::HORIZONTAL,
         };
@@ -81,7 +81,7 @@ impl Rom {
         })
     }
 
-    pub fn new_test(test: Vec<u8>) -> Result<Rom, String> {
+    pub fn _new_test(test: Vec<u8>) -> Result<Rom, String> {
         let mut output_raw = NES_TAG.to_vec(); // NES FILE RECOGNITION
         output_raw.push(0x01); // Rom has only 1 16kB ROM bank
         output_raw.push(0x00); // Rom has no CHR rom banks (ppu data)
@@ -129,14 +129,14 @@ pub mod test {
 
     use super::*;
 
-    struct TestRom {
+    struct _TestRom {
         header: Vec<u8>,
         trainer: Option<Vec<u8>>,
         pgp_rom: Vec<u8>,
         chr_rom: Vec<u8>,
     }
 
-    fn create_rom(rom: TestRom) -> Vec<u8> {
+    fn _create_rom(rom: _TestRom) -> Vec<u8> {
         let mut result = Vec::with_capacity(
             rom.header.len()
                 + rom.trainer.as_ref().map_or(0, |t| t.len())
@@ -154,15 +154,15 @@ pub mod test {
         result
     }
 
-    pub fn test_rom() -> Rom {
-        test_rom_containing(vec![])
+    pub fn _test_rom() -> Rom {
+        _test_rom_containing(vec![])
     }
 
-    pub fn test_rom_containing(program: Vec<u8>) -> Rom {
+    pub fn _test_rom_containing(program: Vec<u8>) -> Rom {
         let mut pgp_rom_contents = program;
         pgp_rom_contents.resize(2 * PRG_ROM_PAGE_SIZE, 0);
 
-        let test_rom = create_rom(TestRom {
+        let _test_rom = _create_rom(_TestRom {
             header: vec![
                 0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 00, 00, 00, 00, 00, 00, 00, 00, 00,
             ],
@@ -171,12 +171,12 @@ pub mod test {
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         });
 
-        Rom::new(&test_rom).unwrap()
+        Rom::new(&_test_rom).unwrap()
     }
 
     #[test]
     fn test() {
-        let test_rom = create_rom(TestRom {
+        let _test_rom = _create_rom(_TestRom {
             header: vec![
                 0x4E, 0x45, 0x53, 0x1A, 0x02, 0x01, 0x31, 00, 00, 00, 00, 00, 00, 00, 00, 00,
             ],
@@ -185,7 +185,7 @@ pub mod test {
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         });
 
-        let rom: Rom = Rom::new(&test_rom).unwrap();
+        let rom: Rom = Rom::new(&_test_rom).unwrap();
 
         assert_eq!(rom.chr_rom, vec!(2; 1 * CHR_ROM_PAGE_SIZE));
         assert_eq!(rom.prg_rom, vec!(1; 2 * PRG_ROM_PAGE_SIZE));
@@ -195,7 +195,7 @@ pub mod test {
 
     #[test]
     fn test_with_trainer() {
-        let test_rom = create_rom(TestRom {
+        let _test_rom = _create_rom(_TestRom {
             header: vec![
                 0x4E,
                 0x45,
@@ -219,7 +219,7 @@ pub mod test {
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         });
 
-        let rom: Rom = Rom::new(&test_rom).unwrap();
+        let rom: Rom = Rom::new(&_test_rom).unwrap();
 
         assert_eq!(rom.chr_rom, vec!(2; 1 * CHR_ROM_PAGE_SIZE));
         assert_eq!(rom.prg_rom, vec!(1; 2 * PRG_ROM_PAGE_SIZE));
@@ -229,7 +229,7 @@ pub mod test {
 
     #[test]
     fn test_nes2_is_not_supported() {
-        let test_rom = create_rom(TestRom {
+        let _test_rom = _create_rom(_TestRom {
             header: vec![
                 0x4E, 0x45, 0x53, 0x1A, 0x01, 0x01, 0x31, 0x8, 00, 00, 00, 00, 00, 00, 00, 00,
             ],
@@ -237,7 +237,7 @@ pub mod test {
             pgp_rom: vec![1; 1 * PRG_ROM_PAGE_SIZE],
             chr_rom: vec![2; 1 * CHR_ROM_PAGE_SIZE],
         });
-        let rom = Rom::new(&test_rom);
+        let rom = Rom::new(&_test_rom);
         match rom {
             Result::Ok(_) => assert!(false, "should not load rom"),
             Result::Err(str) => assert_eq!(str, "NES2.0 format is not supported"),

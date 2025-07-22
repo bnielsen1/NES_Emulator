@@ -97,11 +97,11 @@ impl Mapper1 {
         self.mirroring = match nametable_bits {
             0 => {
                 // single screen first bank
-                Mirroring::SINGLE_LOWER
+                Mirroring::SINGLELOWER
             }
             1 => {
                 // single screen second bank
-                Mirroring::SINGLE_UPPER
+                Mirroring::SINGLEUPPER
             }
             2 => {
                 Mirroring::VERTICAL
@@ -158,28 +158,8 @@ impl Mapper1 {
 // https://www.nesdev.org/wiki/NROM for details on mapping mode 0
 impl Mapper for Mapper1 {
     // Default implementations mostly for test cases
-    fn get_prg_rom(&self) -> Vec<u8> {
-        self.prg_rom.clone()
-    }
-
-    fn get_chr_rom(&self) -> Vec<u8> {
-        self.chr_rom.clone()
-    }
-
-    fn get_mapping(&self) -> u8 {
-        1
-    }
-
     fn get_mirroring(&self) -> Mirroring {
         self.mirroring.clone()
-    }
-
-    fn read_chr_rom(&self, index: usize) -> u8 {
-        self.chr_rom[index]
-    }
-
-    fn read_prg_rom(&self, index: usize) -> u8 {
-        self.prg_rom[index]
     }
 
     // Mapper specific

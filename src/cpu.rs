@@ -1,7 +1,6 @@
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, HashSet};
 
-use crate::rom::Rom;
 use crate::bus::{Bus, Mem};
 
 pub struct CPU<'a> {
@@ -373,7 +372,7 @@ pub enum AddressingMode {
    Absolute,
    Absolute_X,
    Absolute_Y,
-   Indirect,
+   _Indirect,
    Indirect_X,
    Indirect_Y,
    NoneAddressing,
@@ -421,7 +420,7 @@ impl<'a> CPU<'a> {
                 let output = addr.wrapping_add(self.reg_y as u16);
                 output
             },
-            AddressingMode::Indirect => {
+            AddressingMode::_Indirect => {
                 let output = self.mem_read_u16(self.pc);
                 output
             }
@@ -449,6 +448,7 @@ impl<'a> CPU<'a> {
         }
     }
 
+    // Same as get opperand but uses mem peeks instead of mem reads to avoid mutations
     pub fn debug_operand(&self, old_pc: u16, mode: &AddressingMode) -> u16 {
         // Caller prints the output of mem reading this calls return value
         match mode {
@@ -491,7 +491,7 @@ impl<'a> CPU<'a> {
                 // print!("{:04X} = ", output);
                 output
             },
-            AddressingMode::Indirect => {
+            AddressingMode::_Indirect => {
                 let output = self.mem_peek_u16(old_pc);
                 // print!("({:04X}) @ ", output);
                 output
@@ -588,9 +588,14 @@ impl<'a> CPU<'a> {
         self.sp = self.sp.wrapping_add(1);
     }
 
-    pub fn run_rom(&mut self) {
+    // Debug function when no controller input is needed
+    pub fn _run_rom(&mut self) {
         self.reset();
-        self.run();
+        self._run();
+    }
+
+    pub fn _run(&mut self) {
+        self.run_with_callback(|_: &mut CPU| {});
     }
 
     pub fn reset(&mut self) {
@@ -601,10 +606,6 @@ impl<'a> CPU<'a> {
 
         self.pc = self.mem_read_u16(0xFFFC);
         // self.pc = 0x8000; // for testing
-    }
-
-    pub fn run(&mut self) {
-        self.run_with_callback(|_: &mut CPU| {});
     }
 
     fn conditional_cycle_check(&mut self, addr: u16, offset: u8) {
@@ -677,66 +678,6 @@ impl<'a> CPU<'a> {
         self.pc = self.mem_read_u16(0xFFFE); // Set the pc to run whatever instruction our ROM runs on NMI interrupts
     }
 
-    fn new_trace_status(&mut self, op_code: &OpCode, old_pc: u16) {
-
-    }
-
-    fn trace_status(&mut self, op_code: &OpCode, old_pc: u16) {
-        // old_pc should be the PC pointing to the instruction
-
-        // PC REGISTER
-        print!("${:04X} ", old_pc);
-        let mut cur_addr = old_pc; 
-
-        // CPU opcode
-        let mut num_instructions = op_code.bytes;
-        for i in 0..3 {
-            if num_instructions != 0 {
-                num_instructions -= 1;
-                print!("{:02X} ", self.mem_read(cur_addr));
-                cur_addr = cur_addr.wrapping_add(1);
-            } else {
-                print!("   ");
-            }
-        }
-
-        // ASSEMBLY CPU OPCODE
-
-        // get the name of instruction
-        print!("{} ", op_code.code);
-
-        cur_addr = old_pc + 1;
-
-        // Untranslated value of PC for arguments
-        if op_code.bytes == 0 {
-            print!("");
-        } else {
-            let ptr = self.debug_operand(cur_addr, &op_code.addressing_mode);
-            let output = self.mem_read(ptr);
-            print!("{} ", output);
-        }
-
-        // ALL CPU REGISTERS
-        print!("A:{:02X} ", self.reg_a);
-        print!("X:{:02X} ", self.reg_x);
-        print!("Y:{:02X} ", self.reg_y);
-        print!("SP:{:02X} ", self.sp);
-        print!("S:{:08b} ", self.status);
-
-        // PPU STATUS
-        print!("PPU: ");
-        print!("SL: {} ", self.bus.ppu.scanline);
-        print!("CYC: {}", self.bus.ppu.cycles);
-
-        println!("");
-        /*
-        FINISH IMPLEMENTING THIS BEFORE CONTINUING FURTHER
-        SEE SECTION 5.1 of text book to see what else I should do.
-        I'm currently trying to implement the third column  
-         */
-
-    }
-
     pub fn run_with_callback<F>(&mut self, mut callback: F) 
         where
             F: FnMut(&mut CPU),
@@ -779,7 +720,7 @@ impl<'a> CPU<'a> {
 
                 match op_object.code {
                     "LDA" => self.lda(&op_object.addressing_mode),
-                    "BRK" => return, // should call brk() but fails to pass test cases w/o return
+                    "BRK" => self.brk(), // should call brk() but fails to pass test cases w/o return
                     "TAX" => self.tax(),
                     "INX" => self.inx(),
                     "CLC" => self.clc(),

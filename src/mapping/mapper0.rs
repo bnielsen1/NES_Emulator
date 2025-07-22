@@ -31,28 +31,8 @@ impl Mapper0 {
 // https://www.nesdev.org/wiki/NROM for details on mapping mode 0
 impl Mapper for Mapper0 {
     // Default implementations mostly for test cases
-    fn get_prg_rom(&self) -> Vec<u8> {
-        self.prg_rom.clone()
-    }
-
-    fn get_chr_rom(&self) -> Vec<u8> {
-        self.chr_rom.clone()
-    }
-
-    fn get_mapping(&self) -> u8 {
-        0
-    }
-
     fn get_mirroring(&self) -> Mirroring {
         self.mirroring.clone()
-    }
-
-    fn read_chr_rom(&self, index: usize) -> u8 {
-        self.chr_rom[index]
-    }
-
-    fn read_prg_rom(&self, index: usize) -> u8 {
-        self.prg_rom[index]
     }
 
     // Mapper specific

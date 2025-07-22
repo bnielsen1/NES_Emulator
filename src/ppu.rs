@@ -20,7 +20,6 @@ pub struct NesPPU {
     pub oam_data: [u8; 256],
     internal_data_buf: u8, // Storage for 0x2007 reads
     oam_addr: u8, // OAM Address written by 0x2003 and used by 0x2004
-    pub ppu_status: u8,
 
     pub cycles: usize,
     pub scanline: u16,
@@ -35,13 +34,12 @@ pub struct NesPPU {
 
 impl NesPPU {
 
-    pub fn new_empty_rom() -> Self {
-        let test_mapper = Rom::new_test(vec![0; 5]).unwrap().generate_mapper();
+    pub fn _new_empty_rom() -> Self {
+        let test_mapper = Rom::_new_test(vec![0; 5]).unwrap().generate_mapper();
         NesPPU {
             mapper: test_mapper,
             internal_data_buf: 0,
             oam_addr: 0,
-            ppu_status: 0b0000_0000,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             palette_table: [0; 32],
@@ -62,7 +60,6 @@ impl NesPPU {
             mapper: mapper,
             internal_data_buf: 0,
             oam_addr: 0,
-            ppu_status: 0b0000_0000,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             palette_table: [0; 32],
@@ -283,9 +280,9 @@ impl NesPPU {
             (Mirroring::VERTICAL, 2) | (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) | (Mirroring::HORIZONTAL, 1) => vram_index - 0x400,
             (Mirroring::HORIZONTAL, 3) => vram_index - 0x800,
-            (Mirroring::SINGLE_LOWER, 1) | (Mirroring::SINGLE_UPPER, 2) => vram_index - 0x400,
-            (Mirroring::SINGLE_LOWER, 2) | (Mirroring::SINGLE_UPPER, 3) => vram_index - 0x800,
-            (Mirroring::SINGLE_LOWER, 3) => vram_index - 0xC00,
+            (Mirroring::SINGLELOWER, 1) | (Mirroring::SINGLEUPPER, 2) => vram_index - 0x400,
+            (Mirroring::SINGLELOWER, 2) | (Mirroring::SINGLEUPPER, 3) => vram_index - 0x800,
+            (Mirroring::SINGLELOWER, 3) => vram_index - 0xC00,
             _ => vram_index,
         }
     }
@@ -378,16 +375,8 @@ impl StatusRegister {
     }
 
     // Used to read current state for debugging purposes
-    pub fn current_val(&self) -> u8 {
+    pub fn _current_val(&self) -> u8 {
         self.bits()
-    }
-
-    pub fn is_sprite_overflow(&self) -> bool {
-        self.contains(StatusRegister::SPRITE_OVERFLOW)
-    }
-
-    pub fn is_sprite_zero_hit(&self) -> bool {
-        self.contains(StatusRegister::SPRITE_ZERO_HIT)
     }
 
     pub fn is_vblank_started(&self) -> bool {
@@ -416,10 +405,6 @@ impl StatusRegister {
         } else {
             self.remove(StatusRegister::VBLANK_STARTED);
         }
-    }
-
-    pub fn update(&mut self, data: u8) {
-        *self = StatusRegister::from_bits_truncate(data);
     }
 }
 
@@ -467,28 +452,8 @@ impl ControlRegister {
         }
     }
 
-    pub fn is_nametable1(&self) -> bool {
-        self.contains(ControlRegister::NAMETABLE1)
-    }
-
-    pub fn is_nametable2(&self) -> bool {
-        self.contains(ControlRegister::NAMETABLE2)
-    }
-
     pub fn is_sprite_pattern_addr(&self) -> bool {
         self.contains(ControlRegister::SPRITE_PATTERN_ADDR)
-    }
-
-    pub fn get_sprite_bank_val(&self) -> u16 {
-        if self.contains(ControlRegister::SPRITE_PATTERN_ADDR) {
-            0x1000
-        } else {
-            0x0000
-        }
-    }
-
-    pub fn is_background_pattern_addr(&self) -> bool {
-        self.contains(ControlRegister::BACKROUND_PATTERN_ADDR)
     }
 
     pub fn get_background_bank_val(&self) -> u16 {
@@ -501,10 +466,6 @@ impl ControlRegister {
 
     pub fn is_sprite_size(&self) -> bool {
         self.contains(ControlRegister::SPRITE_SIZE)
-    }
-
-    pub fn is_master_slave_select(&self) -> bool {
-        self.contains(ControlRegister::MASTER_SLAVE_SELECT)
     }
 
     pub fn is_generate_nmi(&self) -> bool {
@@ -555,36 +516,8 @@ impl MaskRegister {
         MaskRegister::from_bits_truncate(0b0000_0000)
     }
 
-    pub fn is_greyscale(&self) -> bool {
-        self.contains(MaskRegister::GREYSCALE)
-    }
-
-    pub fn is_left_background(&self) -> bool {
-        self.contains(MaskRegister::SHOW_LEFT_BACKGROUND)
-    }
-
-    pub fn is_left_sprites(&self) -> bool {
-        self.contains(MaskRegister::SHOW_LEFT_SPRITES)
-    }
-
-    pub fn is_background_rendering(&self) -> bool {
-        self.contains(MaskRegister::BACKGROUND_RENDERING)
-    }
-
     pub fn is_sprite_rendering(&self) -> bool {
         self.contains(MaskRegister::SPRITE_RENDERING)
-    }
-
-    pub fn is_emphasizing_red(&self) -> bool {
-        self.contains(MaskRegister::EMPH_RED)
-    }
-
-    pub fn is_emphasizing_green(&self) -> bool {
-        self.contains(MaskRegister::EMPH_GREEN)
-    }
-
-    pub fn is_emphasizing_blue(&self) -> bool {
-        self.contains(MaskRegister::EMPH_BLUE)
     }
 
     pub fn update(&mut self, data: u8) {
@@ -633,7 +566,7 @@ pub mod test {
 
     #[test]
     fn test_ppu_vram_writes() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ppu_addr(0x23);
         ppu.write_to_ppu_addr(0x05);
         ppu.write_to_data(0x66);
@@ -643,7 +576,7 @@ pub mod test {
 
     #[test]
     fn test_ppu_vram_reads() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ctrl(0);
         ppu.vram[0x0305] = 0x66;
 
@@ -657,7 +590,7 @@ pub mod test {
 
     #[test]
     fn test_ppu_vram_reads_cross_page() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ctrl(0);
         ppu.vram[0x01ff] = 0x66;
         ppu.vram[0x0200] = 0x77;
@@ -672,7 +605,7 @@ pub mod test {
 
     #[test]
     fn test_ppu_vram_reads_step_32() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ctrl(0b100);
         ppu.vram[0x01ff] = 0x66;
         ppu.vram[0x01ff + 32] = 0x77;
@@ -692,7 +625,7 @@ pub mod test {
     //   [0x2800 B ] [0x2C00 b ]
     #[test]
     fn test_vram_horizontal_mirror() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ppu_addr(0x24);
         ppu.write_to_ppu_addr(0x05);
 
@@ -721,7 +654,7 @@ pub mod test {
     //   [0x2800 a ] [0x2C00 b ]
     #[test]
     fn test_vram_vertical_mirror() {
-        let test_mapper = Rom::new_test(vec![0; 5]).unwrap().generate_mapper();
+        let test_mapper = Rom::_new_test(vec![0; 5]).unwrap().generate_mapper();
         let mut ppu = NesPPU::new(test_mapper);
 
         ppu.write_to_ppu_addr(0x20);
@@ -749,7 +682,7 @@ pub mod test {
 
     #[test]
     fn test_read_status_resets_latch() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.vram[0x0305] = 0x66;
 
         ppu.write_to_ppu_addr(0x21);
@@ -770,7 +703,7 @@ pub mod test {
 
     #[test]
     fn test_ppu_vram_mirroring() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.write_to_ctrl(0);
         ppu.vram[0x0305] = 0x66;
 
@@ -784,18 +717,18 @@ pub mod test {
 
     #[test]
     fn test_read_status_resets_vblank() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.status.set_vblank_started(true);
 
         let status = ppu.read_status();
 
         assert_eq!(status >> 7, 1);
-        assert_eq!(ppu.status.current_val() >> 7, 0);
+        assert_eq!(ppu.status._current_val() >> 7, 0);
     }
 
     #[test]
     fn test_oam_read_write() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
         ppu.oam_addr_write(0x10);
         ppu.oam_data_write(0x66);
         ppu.oam_data_write(0x77);
@@ -809,7 +742,7 @@ pub mod test {
 
     #[test]
     fn test_oam_dma() {
-        let mut ppu = NesPPU::new_empty_rom();
+        let mut ppu = NesPPU::_new_empty_rom();
 
         let mut data = [0x66; 256];
         data[0] = 0x77;

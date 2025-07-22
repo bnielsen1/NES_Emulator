@@ -4,7 +4,7 @@ use std::vec;
 
 use crate::ppu::NesPPU;
 use crate::frame::Frame;
-use crate::palette::{self, SYSTEM_PALLETE};
+use crate::palette::{SYSTEM_PALLETE};
 use crate::rom::Mirroring;
 
 struct Rect {
@@ -26,7 +26,7 @@ impl Rect {
 }
 
 fn render_name_table(ppu: &NesPPU, frame: &mut Frame, name_table: &[u8], view_port: Rect, shift_x: isize, shift_y: isize) {
-    let mut bank = ppu.ctrl.get_background_bank_val();
+    let bank = ppu.ctrl.get_background_bank_val();
 
     let attribute_table = &name_table[0x3C0..0x400]; // Stores palette table information from the name table/screen ram
 
@@ -90,10 +90,10 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             // println!("Base == A | Second == B");
             (&ppu.vram[0x400..0x800], &ppu.vram[0..0x400])
         }
-        (Mirroring::SINGLE_LOWER, _) => {
+        (Mirroring::SINGLELOWER, _) => {
             (&ppu.vram[0..0x400], &ppu.vram[0..0x400])
         }
-        (Mirroring::SINGLE_UPPER, _) => {
+        (Mirroring::SINGLEUPPER, _) => {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x400..0x800])
         }
         (_,_) => panic!("Unsupported mirroring type?")
@@ -168,7 +168,7 @@ fn render_8x8_sprite(ppu: &NesPPU, frame: &mut Frame, tile_y: usize, tile_index:
     let sprite_palette = sprite_palette(ppu, palette_index);
 
     // Select bank based off ctrl register
-    let mut bank = if ppu.ctrl.is_sprite_pattern_addr() {
+    let bank = if ppu.ctrl.is_sprite_pattern_addr() {
         0x1000
     } else {
         0x0000
