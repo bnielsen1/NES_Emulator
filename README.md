@@ -2,28 +2,16 @@
 
 # R-NES 
 
-<div style="display: flex; align-items: flex-start;">
-  <div style="flex: 1; padding-right: 20px;">
-    <ul style="padding-left: 20px;">
-      <li style="margin-bottom: 12px;">
-        <b>NROM</b> and <b>MMC1</b> mapper support with future plans to support more mapper types.
-      </li>
-      <li style="margin-bottom: 12px;">
-        100% accurate implementation of <b>all 151</b> official 6502 microprocessor instructions.
-      </li>
-      <li style="margin-bottom: 12px;">
-        Support for both <i>vertical</i> and <i>horizontal</i> scrolling modes.
-      </li>
-      <li style="margin-bottom: 12px;">
-        Tested to play a variety of games including but not limited to: "Super Mario Bros", "Donkey Kong", and "Tetris". See <a href="#support"><b>Support</b></a> for details on supported games.
-      </li>
-    </ul>
-  </div>
-  <div>
-    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png" alt="NES console" width="200"/>
-  </div>
-</div>
+# My NES Emulator
 
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png"
+     align="right" alt="NES console" width="200">
+
+* <b>NROM</b> and <b>MMC1</b> mapper support with future plans to support more mapper types.
+* 100% accurate implementation of <b>all 151</b> official 6502 microprocessor instructions.
+* Support for both <i>vertical</i> and <i>horizontal</i> scrolling modes.
+* Tested to play a variety of games including but not limited to: *Super Mario Bros*, *Donkey Kong*, and *Tetris*.
+  See <a href="#support"><b>Support</b></a> for details on supported games.
 
 
 
