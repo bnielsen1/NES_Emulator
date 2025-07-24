@@ -2,9 +2,9 @@
 
 # R-NES 
 
-<table border="0">
+<table style="border: none;">
   <tr>
-    <td>
+    <td style="border: none; vertical-align: top;">
       <ul style="padding-left: 20px;">
         <li style="margin-bottom: 12px;">
           <b>NROM</b> and <b>MMC1</b> mapper support with future plans to support more mapper types.
@@ -20,11 +20,12 @@
         </li>
       </ul>
     </td>
-    <td>
+    <td style="border: none; padding-left: 20px;">
       <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png" alt="NES console" width="200"/>
     </td>
   </tr>
 </table>
+
 
 
 ## Controls
