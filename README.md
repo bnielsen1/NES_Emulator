@@ -88,7 +88,7 @@ The following games have been tested on the emulator with different degrees of s
       <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;text-align:center;">Zelda 1</td>
       <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;text-align:center;">1</td>
       <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;background-color:#fce8b2;text-align:center;">P</td>
-      <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;">Upward and downward function correctly but display wrong</td>
+      <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;">Upward and downward scroll function correctly but display wrong</td>
     </tr>
     <tr style="height:21px;">
       <td style="overflow:hidden;padding:2px 3px 2px 3px;vertical-align:bottom;text-align:center;">Super Mario Bros</td>
