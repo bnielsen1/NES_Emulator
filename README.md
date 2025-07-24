@@ -2,6 +2,7 @@
 
 # R-NES ![NES](https://img.shields.io/badge/Platform-NES-red?logo=nintendo) ![Emulator](https://img.shields.io/badge/Type-Emulator-blueviolet) ![Rust](https://img.shields.io/badge/Made_with-Rust-orange?logo=rust)
 
+R-NES is a fully functioning emulator built entirely in Rust for the Nintendo Entertainment System, a gaming console from 1983. 
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png"
      align="right" alt="NES console" width="300">
