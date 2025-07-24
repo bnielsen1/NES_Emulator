@@ -2,7 +2,7 @@
 
 # R-NES 
 
-<table>
+<table border="0">
   <tr>
     <td>
       <ul style="padding-left: 20px;">
