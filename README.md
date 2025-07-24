@@ -2,8 +2,6 @@
 
 # R-NES 
 
-# My NES Emulator
-
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png"
      align="right" alt="NES console" width="300">
 
@@ -19,9 +17,11 @@
 Pressing **escape** will close the emulator at any time!
 
 Controller 1 (Keyboard):
+
 <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/Nes_controller.svg" alt="Nes controller" width="100"/> D-Pad -> "Arrow keys", Start -> "Return", Select -> "Space", A -> "A key", B -> "S key"
 
 Controller 2 (Disabled by default):
+
 <img src="https://upload.wikimedia.org/wikipedia/commons/3/30/Nes_controller.svg" alt="Nes controller" width="100"/> *(Future support planned)*
 
 ## Usage
