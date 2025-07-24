@@ -5,7 +5,7 @@
 # My NES Emulator
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/NES-Console-Set.png/1280px-NES-Console-Set.png"
-     align="right" alt="NES console" width="200">
+     align="right" alt="NES console" width="300">
 
 * <b>NROM</b> and <b>MMC1</b> mapper support with future plans to support more mapper types.
 * 100% accurate implementation of <b>all 151</b> official 6502 microprocessor instructions.
